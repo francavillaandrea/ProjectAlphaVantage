@@ -1,38 +1,138 @@
-html, body {
-  background-color: #048;
+﻿:root {
+  --bg: #eaf1f8;
+  --panel: #ffffff;
+  --ink: #1b2a41;
+  --muted: #5a6a85;
+  --accent: #0069c0;
+  --border: #d6dfeb;
+  --ok: #0a7d3b;
+  --shadow: 0 10px 30px rgba(0, 26, 58, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  color: var(--ink);
+  background: linear-gradient(150deg, #d8e7f7 0%, #f6fbff 100%);
 }
 
 #wrapper {
-  max-width: 940px;
-  height:100vh;
-  background-color: white;
-  margin: 50px auto;
-  padding:20px;
-  border: 1px solid black;
-  box-shadow: 0 0 20px 7px black;
-  text-align: center;
+  width: min(1100px, calc(100% - 2rem));
+  margin: 1.2rem auto;
+  display: grid;
+  gap: 1rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.1rem, 1rem + 1.1vw, 1.9rem);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 1rem;
+}
+
+label {
+  font-weight: 600;
+  display: block;
+  margin-bottom: 0.45rem;
+}
+
+select,
+input {
+  width: 100%;
+  font-size: 1rem;
+  padding: 0.62rem 0.75rem;
+  border: 1px solid #b9c8dd;
+  border-radius: 10px;
+  outline: none;
+}
+
+select:focus,
+input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 105, 192, 0.15);
+}
+
+.status {
+  min-height: 1.2rem;
+  margin: 0.55rem 0 0;
+  color: var(--muted);
+}
+
+.status.ok {
+  color: var(--ok);
+}
+
+.table-wrap {
+  overflow-x: auto;
 }
 
 table {
-  table-layout: fixed;
   width: 100%;
-  margin-bottom:40px;
+  border-collapse: collapse;
+  min-width: 860px;
 }
 
-td,th {
-  border: 1px solid #ccc;
-}
-
-th {
-  height: 60px;
+thead td {
+  background: #f2f6fc;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 td {
-  height: 30px;
-  text-align:right;
+  border: 1px solid var(--border);
+  padding: 0.55rem;
+  font-size: 0.92rem;
+  text-align: right;
+  white-space: nowrap;
 }
 
-#search p{
-	display:flex;
-	justify-content:left;
+td:first-child {
+  text-align: left;
+  font-weight: 700;
+}
+
+#searchResults {
+  margin: 0.8rem 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#searchResults li {
+  padding: 0.62rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  background: #fff;
+}
+
+#searchResults li:last-child {
+  border-bottom: 0;
+}
+
+#searchResults li:hover {
+  background: #f3f8fe;
+}
+
+@media (max-width: 640px) {
+  #wrapper {
+    width: calc(100% - 1rem);
+    margin: 0.6rem auto;
+  }
+
+  .panel {
+    padding: 0.8rem;
+    border-radius: 12px;
+  }
 }

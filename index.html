@@ -1,40 +1,58 @@
-<html>
+﻿<!doctype html>
+<html lang="it">
 
 <head>
-    <title>Get Stock Quotes</title>
-    <link rel="stylesheet" type="text/css" href="./index.css">
-    <script src="./libs/axios@1.13.min.js" type="application/javascript"></script>
-    <script src="./libs/libreria.js" type="application/javascript"></script>
-    <script defer src="./index.js" type="application/javascript"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AlphaVantage - Quote Aziendali</title>
+  <link rel="stylesheet" type="text/css" href="./index.css" />
+  <script src="./libs/axios@1.13.min.js" type="application/javascript"></script>
+  <script src="./libs/libreria.js" type="application/javascript"></script>
+  <script defer src="./index.js" type="application/javascript"></script>
 </head>
 
 <body>
-    <div id="wrapper">
-        <div id="quote">
-            <table cellspacing="0" cellpadding="3">
-                <tr class="header">
-                </tr>
-                <tr>
-                    <td id="symbol"></td>
-                    <td id="lastTrade"></td>
-                    <td id="volume"></td>
-                    <td id="openValue"></td>
-                    <td id="daysHigh"></td>
-                    <td id="daysLow"></td>
-                    <td id="lastTradeDay"></td>
-                    <td id="previousClose"></td>
-                    <td id="change"></td>
-                    <td id="changePercent"></td>
-                </tr>
-            </table>
-        </div>
-		
-		<div id="search">
-		    <p>incremental search: <input type="text"> </p>
-		    <p><button>overview</button></p>
-		</div>
-		
-    </div>
+  <main id="wrapper">
+    <h1>AlphaVantage - GLOBAL_QUOTE</h1>
+
+    <section class="panel">
+      <label for="cmbCompanies">Seleziona azienda</label>
+      <select id="cmbCompanies">
+        <option value="">Caricamento aziende...</option>
+      </select>
+      <p id="status" class="status"></p>
+    </section>
+
+    <section id="quote" class="panel">
+      <div class="table-wrap">
+        <table cellspacing="0" cellpadding="0" aria-label="Quote azienda selezionata">
+          <thead>
+            <tr class="header"></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td id="symbol"></td>
+              <td id="lastTrade"></td>
+              <td id="volume"></td>
+              <td id="openValue"></td>
+              <td id="daysHigh"></td>
+              <td id="daysLow"></td>
+              <td id="lastTradeDay"></td>
+              <td id="previousClose"></td>
+              <td id="change"></td>
+              <td id="changePercent"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="search" class="panel">
+      <label for="txtSearch">Ricerca incrementale aziende locali (minimo 2 caratteri)</label>
+      <input id="txtSearch" type="text" placeholder="Es. micro, bank, tesla" autocomplete="off" />
+      <ul id="searchResults"></ul>
+    </section>
+  </main>
 </body>
 
 </html>

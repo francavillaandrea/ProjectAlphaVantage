@@ -1,0 +1,20 @@
+﻿{
+  "companies": [
+    { "id": 1, "symbol": "MSFT", "name": "Microsoft Corporation" },
+    { "id": 2, "symbol": "AAPL", "name": "Apple Inc." },
+    { "id": 3, "symbol": "IBM", "name": "International Business Machines Corporation" },
+    { "id": 4, "symbol": "SNE", "name": "Sony Group Corporation" },
+    { "id": 5, "symbol": "BABA", "name": "Alibaba Group Holding Limited" },
+    { "id": 6, "symbol": "XIACF", "name": "Xiaomi Corporation" },
+    { "id": 7, "symbol": "GOOGL", "name": "Alphabet Inc." },
+    { "id": 8, "symbol": "AMZN", "name": "Amazon.com, Inc." },
+    { "id": 9, "symbol": "META", "name": "Meta Platforms, Inc." },
+    { "id": 10, "symbol": "TSLA", "name": "Tesla, Inc." },
+    { "id": 11, "symbol": "NVDA", "name": "NVIDIA Corporation" },
+    { "id": 12, "symbol": "ORCL", "name": "Oracle Corporation" },
+    { "id": 13, "symbol": "INTC", "name": "Intel Corporation" },
+    { "id": 14, "symbol": "SAP", "name": "SAP SE" },
+    { "id": 15, "symbol": "CRM", "name": "Salesforce, Inc." },
+    { "id": 16, "symbol": "ADBE", "name": "Adobe Inc." }
+  ]
+}
