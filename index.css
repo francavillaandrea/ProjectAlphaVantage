@@ -1,0 +1,38 @@
+html, body {
+  background-color: #048;
+}
+
+#wrapper {
+  max-width: 940px;
+  height:100vh;
+  background-color: white;
+  margin: 50px auto;
+  padding:20px;
+  border: 1px solid black;
+  box-shadow: 0 0 20px 7px black;
+  text-align: center;
+}
+
+table {
+  table-layout: fixed;
+  width: 100%;
+  margin-bottom:40px;
+}
+
+td,th {
+  border: 1px solid #ccc;
+}
+
+th {
+  height: 60px;
+}
+
+td {
+  height: 30px;
+  text-align:right;
+}
+
+#search p{
+	display:flex;
+	justify-content:left;
+}
