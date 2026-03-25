@@ -1,58 +1,402 @@
-﻿<!doctype html>
+<!DOCTYPE html>
 <html lang="it">
-
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AlphaVantage - Quote Aziendali</title>
-  <link rel="stylesheet" type="text/css" href="./index.css" />
-  <script src="./libs/axios@1.13.min.js" type="application/javascript"></script>
-  <script src="./libs/libreria.js" type="application/javascript"></script>
-  <script defer src="./index.js" type="application/javascript"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>StockVision — AlphaVantage Dashboard</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <!-- Google Fonts: Syne (display) + JetBrains Mono (data) -->
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <!-- Leaflet.js per mappa -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <link rel="stylesheet" href="style.css"/>
 </head>
+<body class="dark-mode">
 
-<body>
-  <main id="wrapper">
-    <h1>AlphaVantage - GLOBAL_QUOTE</h1>
+  <!-- ═══════════════════════════════════════════
+       NAVBAR
+  ═══════════════════════════════════════════ -->
+  <nav class="navbar navbar-expand-lg sticky-top" id="mainNav" aria-label="Navigazione principale">
+    <div class="container-fluid px-4">
+      <!-- Brand -->
+      <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+        <span class="brand-icon" aria-hidden="true">◈</span>
+        <span class="brand-text">Stock<span class="brand-accent">Vision</span></span>
+      </a>
 
-    <section class="panel">
-      <label for="cmbCompanies">Seleziona azienda</label>
-      <select id="cmbCompanies">
-        <option value="">Caricamento aziende...</option>
-      </select>
-      <p id="status" class="status"></p>
-    </section>
+      <!-- Dark Mode Toggle -->
+      <div class="d-flex align-items-center gap-3 ms-auto">
+        <button class="theme-toggle" id="themeToggle" aria-label="Cambia tema chiaro/scuro" title="Cambia tema">
+          <i class="bi bi-moon-fill" id="themeIcon"></i>
+        </button>
+        <!-- Hamburger -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navMenu" aria-controls="navMenu"
+                aria-expanded="false" aria-label="Apri menu">
+          <i class="bi bi-list"></i>
+        </button>
+      </div>
 
-    <section id="quote" class="panel">
-      <div class="table-wrap">
-        <table cellspacing="0" cellpadding="0" aria-label="Quote azienda selezionata">
+      <!-- Nav links -->
+      <div class="collapse navbar-collapse" id="navMenu">
+        <ul class="navbar-nav ms-auto gap-1">
+          <li class="nav-item"><a class="nav-link" href="#section-quote"><i class="bi bi-graph-up-arrow me-1"></i>Quotazione</a></li>
+          <li class="nav-item"><a class="nav-link" href="#section-search"><i class="bi bi-search me-1"></i>Ricerca</a></li>
+          <li class="nav-item"><a class="nav-link" href="#section-chart"><i class="bi bi-bar-chart-line me-1"></i>Grafici</a></li>
+          <li class="nav-item"><a class="nav-link" href="#section-overview"><i class="bi bi-building me-1"></i>Overview</a></li>
+          <li class="nav-item"><a class="nav-link" href="#section-map"><i class="bi bi-geo-alt me-1"></i>Mappa</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════
+       HERO
+  ═══════════════════════════════════════════ -->
+  <header class="hero-section" aria-label="Intestazione">
+    <div class="hero-grid" aria-hidden="true"></div>
+    <div class="container py-5">
+      <div class="hero-content text-center">
+        <p class="hero-eyebrow">REAL-TIME MARKET DATA</p>
+        <h1 class="hero-title">Mercati Finanziari<br/><span class="hero-accent">a Portata di Mano</span></h1>
+        <p class="hero-subtitle">Dashboard alimentata da AlphaVantage API — quotazioni live, grafici storici, analisi societarie</p>
+        <div class="hero-stats d-flex justify-content-center gap-4 flex-wrap mt-4" id="heroStats" aria-live="polite">
+          <div class="hero-stat-item"><span class="stat-label">AZIENDE</span><span class="stat-val" id="statAziende">20</span></div>
+          <div class="hero-stat-item"><span class="stat-label">MERCATO</span><span class="stat-val">NYSE</span></div>
+          <div class="hero-stat-item"><span class="stat-label">POWERED BY</span><span class="stat-val">AlphaVantage</span></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container-fluid px-3 px-lg-5">
+
+    <!-- ═══════════════════════════════════════════
+         SEZIONE 1 — GLOBAL QUOTE
+    ═══════════════════════════════════════════ -->
+    <section id="section-quote" class="section-block" aria-labelledby="quoteHeading">
+      <div class="section-header">
+        <span class="section-tag">01</span>
+        <h2 id="quoteHeading" class="section-title">Quotazione in Tempo Reale</h2>
+        <p class="section-desc">Seleziona un'azienda dal menu per visualizzare i dati borsistici odierni.</p>
+      </div>
+
+      <div class="row g-4 align-items-end">
+        <div class="col-12 col-md-6 col-lg-4">
+          <label for="companySelect" class="form-label field-label">
+            <i class="bi bi-buildings me-1"></i> Seleziona Azienda
+          </label>
+          <div class="select-wrapper">
+            <select class="form-select custom-select" id="companySelect" aria-label="Seleziona azienda">
+              <option value="">— Scegli un'azienda —</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-12 col-md-4 col-lg-3">
+          <button class="btn btn-primary-custom w-100" id="btnQuote" aria-label="Carica quotazione">
+            <i class="bi bi-arrow-repeat me-2"></i>Carica Quotazione
+          </button>
+        </div>
+        <div class="col-12 col-md-2 col-lg-2">
+          <button class="btn btn-outline-custom w-100" id="btnUpdateQuote" aria-label="Aggiorna da AlphaVantage" title="Aggiorna dati live da AlphaVantage">
+            <i class="bi bi-cloud-download me-1"></i> Update
+          </button>
+        </div>
+      </div>
+
+      <!-- Loading spinner -->
+      <div class="loading-bar mt-3" id="quoteLoading" role="status" aria-label="Caricamento in corso" style="display:none;">
+        <div class="loading-pulse"></div>
+        <span>Recupero dati in corso…</span>
+      </div>
+
+      <!-- Quote Table -->
+      <div class="table-wrapper mt-4" id="quoteTableWrapper" style="display:none;" aria-live="polite">
+        <table class="table data-table" id="quoteTable" aria-label="Dati quotazione">
           <thead>
-            <tr class="header"></tr>
-          </thead>
-          <tbody>
             <tr>
-              <td id="symbol"></td>
-              <td id="lastTrade"></td>
-              <td id="volume"></td>
-              <td id="openValue"></td>
-              <td id="daysHigh"></td>
-              <td id="daysLow"></td>
-              <td id="lastTradeDay"></td>
-              <td id="previousClose"></td>
-              <td id="change"></td>
-              <td id="changePercent"></td>
+              <th scope="col">SIMBOLO</th>
+              <th scope="col">OPEN</th>
+              <th scope="col">HIGH</th>
+              <th scope="col">LOW</th>
+              <th scope="col">PRICE</th>
+              <th scope="col">VOLUME</th>
+              <th scope="col">PREV. CLOSE</th>
+              <th scope="col">CHANGE</th>
+              <th scope="col">CHANGE %</th>
             </tr>
-          </tbody>
+          </thead>
+          <tbody id="quoteTableBody"></tbody>
         </table>
       </div>
     </section>
 
-    <section id="search" class="panel">
-      <label for="txtSearch">Ricerca incrementale aziende locali (minimo 2 caratteri)</label>
-      <input id="txtSearch" type="text" placeholder="Es. micro, bank, tesla" autocomplete="off" />
-      <ul id="searchResults"></ul>
-    </section>
-  </main>
-</body>
+    <!-- ═══════════════════════════════════════════
+         SEZIONE 2 — SYMBOL SEARCH
+    ═══════════════════════════════════════════ -->
+    <section id="section-search" class="section-block" aria-labelledby="searchHeading">
+      <div class="section-header">
+        <span class="section-tag">02</span>
+        <h2 id="searchHeading" class="section-title">Ricerca Incrementale Aziende</h2>
+        <p class="section-desc">Digita almeno 2 caratteri per cercare tra le aziende nel database locale.</p>
+      </div>
 
+      <div class="row g-3">
+        <div class="col-12 col-md-6 col-lg-5">
+          <label for="searchInput" class="form-label field-label">
+            <i class="bi bi-search me-1"></i> Cerca Azienda
+          </label>
+          <div class="search-input-wrapper">
+            <input type="text" class="form-control custom-input" id="searchInput"
+                   placeholder="Es: Apple, Tesla, IBM…"
+                   aria-label="Cerca azienda per nome"
+                   autocomplete="off"/>
+            <i class="bi bi-search search-icon" aria-hidden="true"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Risultati ricerca -->
+      <div class="search-results mt-3" id="searchResults" role="region" aria-live="polite" aria-label="Risultati ricerca"></div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════
+         SEZIONE 3 — GRAFICI STORICI
+    ═══════════════════════════════════════════ -->
+    <section id="section-chart" class="section-block" aria-labelledby="chartHeading">
+      <div class="section-header">
+        <span class="section-tag">03</span>
+        <h2 id="chartHeading" class="section-title">Grafici Storici</h2>
+        <p class="section-desc">Visualizza l'andamento del prezzo di chiusura su diversi periodi temporali.</p>
+      </div>
+
+      <div class="row g-3 align-items-end mb-4">
+        <div class="col-12 col-sm-6 col-lg-3">
+          <label for="chartSymbol" class="form-label field-label">Simbolo</label>
+          <div class="select-wrapper">
+            <select class="form-select custom-select" id="chartSymbol" aria-label="Simbolo per grafico">
+              <option value="">— Seleziona —</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+          <label for="chartPeriod" class="form-label field-label">Periodo</label>
+          <div class="select-wrapper">
+            <select class="form-select custom-select" id="chartPeriod" aria-label="Periodo grafico">
+              <option value="7">Ultima settimana</option>
+              <option value="30" selected>Ultimo mese</option>
+              <option value="90">Ultimi 3 mesi</option>
+              <option value="365">Ultimo anno</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+          <label for="chartType" class="form-label field-label">Tipo Grafico</label>
+          <div class="select-wrapper">
+            <select class="form-select custom-select" id="chartType" aria-label="Tipo di grafico">
+              <option value="line">Line Chart</option>
+              <option value="bar">Bar Chart</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+          <button class="btn btn-primary-custom w-100" id="btnChart" aria-label="Genera grafico">
+            <i class="bi bi-graph-up me-2"></i>Genera Grafico
+          </button>
+        </div>
+      </div>
+
+      <div class="chart-container-wrapper">
+        <div class="chart-box" id="chartBox" style="display:none;" aria-label="Grafico andamento prezzi">
+          <div class="chart-toolbar">
+            <span id="chartTitle" class="chart-title-label"></span>
+            <button class="btn-save-chart" id="btnSaveChart" aria-label="Salva grafico come immagine">
+              <i class="bi bi-download me-1"></i> Salva PNG
+            </button>
+          </div>
+          <canvas id="stockChart" role="img" aria-label="Grafico prezzi azionari"></canvas>
+        </div>
+        <div class="chart-placeholder" id="chartPlaceholder" aria-hidden="true">
+          <i class="bi bi-bar-chart-line-fill placeholder-icon"></i>
+          <p>Seleziona un'azienda e genera il grafico</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════
+         SEZIONE 4 — COMPANY OVERVIEW
+    ═══════════════════════════════════════════ -->
+    <section id="section-overview" class="section-block" aria-labelledby="overviewHeading">
+      <div class="section-header">
+        <span class="section-tag">04</span>
+        <h2 id="overviewHeading" class="section-title">Company Overview</h2>
+        <p class="section-desc">Informazioni anagrafiche e finanziarie dell'azienda selezionata.</p>
+      </div>
+
+      <div class="row g-3 align-items-end mb-4">
+        <div class="col-12 col-md-5 col-lg-4">
+          <label for="overviewSymbol" class="form-label field-label">Seleziona Azienda</label>
+          <div class="select-wrapper">
+            <select class="form-select custom-select" id="overviewSymbol" aria-label="Azienda per overview">
+              <option value="">— Seleziona —</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-12 col-md-4 col-lg-3">
+          <button class="btn btn-primary-custom w-100" id="btnOverview" aria-label="Carica overview azienda">
+            <i class="bi bi-info-circle me-2"></i>Carica Overview
+          </button>
+        </div>
+      </div>
+
+      <!-- Overview Card -->
+      <div id="overviewCard" style="display:none;" aria-live="polite"></div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════
+         SEZIONE 5 — MAPPA SEDE AZIENDALE
+    ═══════════════════════════════════════════ -->
+    <section id="section-map" class="section-block" aria-labelledby="mapHeading">
+      <div class="section-header">
+        <span class="section-tag">05</span>
+        <h2 id="mapHeading" class="section-title">Geo-localizzazione Sede</h2>
+        <p class="section-desc">Visualizza la sede aziendale su mappa interattiva tramite geocoding.</p>
+      </div>
+
+      <div class="row g-3 align-items-end mb-4">
+        <div class="col-12 col-md-5 col-lg-4">
+          <label for="mapSymbol" class="form-label field-label">Seleziona Azienda</label>
+          <div class="select-wrapper">
+            <select class="form-select custom-select" id="mapSymbol" aria-label="Azienda per mappa">
+              <option value="">— Seleziona —</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-12 col-md-4 col-lg-3">
+          <button class="btn btn-primary-custom w-100" id="btnMap" aria-label="Mostra sede su mappa">
+            <i class="bi bi-geo-alt me-2"></i>Mostra su Mappa
+          </button>
+        </div>
+      </div>
+
+      <div id="mapContainer" class="map-container" aria-label="Mappa sede aziendale" role="region">
+        <div id="map"></div>
+        <div class="map-address-badge" id="mapAddressBadge" style="display:none;" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════
+         FAQ ACCORDION (componente extra)
+    ═══════════════════════════════════════════ -->
+    <section id="section-faq" class="section-block" aria-labelledby="faqHeading">
+      <div class="section-header">
+        <span class="section-tag">06</span>
+        <h2 id="faqHeading" class="section-title">FAQ — Domande Frequenti</h2>
+      </div>
+
+      <div class="accordion custom-accordion" id="faqAccordion">
+
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button collapsed" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#faq1"
+                    aria-expanded="false" aria-controls="faq1">
+              <i class="bi bi-question-circle me-2" aria-hidden="true"></i> Cos'è AlphaVantage?
+            </button>
+          </h3>
+          <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              AlphaVantage è un'API pubblica che fornisce dati finanziari in tempo reale e storici per azioni, forex e criptovalute. Offre un piano gratuito con 25 richieste/giorno e 5 richieste/minuto.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button collapsed" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#faq2"
+                    aria-expanded="false" aria-controls="faq2">
+              <i class="bi bi-database me-2" aria-hidden="true"></i> Perché si usa json-server?
+            </button>
+          </h3>
+          <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              json-server simula un backend REST locale. Poiché AlphaVantage ha un limite di 25 richieste/giorno, i dati vengono salvati in <code>db.json</code> e le richieste vengono indirizzate al server locale per non esaurire la quota.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button collapsed" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#faq3"
+                    aria-expanded="false" aria-controls="faq3">
+              <i class="bi bi-arrow-repeat me-2" aria-hidden="true"></i> Come aggiornare i dati live?
+            </button>
+          </h3>
+          <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              Utilizza il pulsante <strong>"Update"</strong> nella sezione Quotazione per effettuare una chiamata diretta ad AlphaVantage e aggiornare il database locale. Ricorda che hai 25 chiamate al giorno nel piano gratuito.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button collapsed" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#faq4"
+                    aria-expanded="false" aria-controls="faq4">
+              <i class="bi bi-moon-stars me-2" aria-hidden="true"></i> Come funziona la Dark Mode?
+            </button>
+          </h3>
+          <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              Clicca l'icona luna/sole in alto a destra nella navbar. La preferenza viene salvata in <code>localStorage</code> e persistita tra i ricaricamenti della pagina.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════
+       TOAST NOTIFICATION
+  ═══════════════════════════════════════════ -->
+  <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:9999;">
+    <div id="liveToast" class="toast custom-toast align-items-center border-0" role="alert"
+         aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body" id="toastMessage"></div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                data-bs-dismiss="toast" aria-label="Chiudi notifica"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       FOOTER
+  ═══════════════════════════════════════════ -->
+  <footer class="site-footer" role="contentinfo">
+    <div class="container text-center">
+      <p class="footer-brand">◈ Stock<span>Vision</span></p>
+      <p class="footer-meta">Progetto scolastico — Classe IV INF B · ITIS G. Vallauri, Fossano</p>
+      <p class="footer-powered">Powered by <a href="https://www.alphavantage.co" target="_blank" rel="noopener noreferrer">AlphaVantage API</a></p>
+    </div>
+  </footer>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- App JS -->
+  <script src="script.js"></script>
+</body>
 </html>
