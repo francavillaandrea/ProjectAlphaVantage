@@ -1,857 +1,945 @@
-/**
- * StockVision — script.js
- * ──────────────────────────────────────────────────────
- * Progetto AlphaVantage · Classe IV INF B · ITIS Vallauri
- *
- * Architettura:
- *  - CONFIG: costanti globali (URL, API key)
- *  - UTILS:  funzioni helper (toast, formatNumbers, ecc.)
- *  - THEME:  gestione dark/light mode
- *  - INIT:   caricamento iniziale aziende da json-server
- *  - QUOTE:  sezione GLOBAL_QUOTE
- *  - SEARCH: sezione SYMBOL_SEARCH (ricerca incrementale lato client)
- *  - CHART:  sezione grafici (Chart.js, line/bar, salvataggio PNG)
- *  - OVERVIEW: sezione company overview
- *  - MAP:    geo-visualizzazione sede (Leaflet + Nominatim geocoding)
- */
+"use strict";
 
-'use strict';
-
-/* ═══════════════════════════════════════════════════════
-   CONFIG
-═══════════════════════════════════════════════════════ */
 const CONFIG = {
-  // json-server locale (default: porta 3000)
-  JSON_SERVER: 'http://localhost:3000',
-
-  // La tua API key AlphaVantage (sostituisci con la tua!)
-  AV_KEY: 'demo',
-  AV_BASE: 'https://www.alphavantage.co/query',
+    alphaVantageKey: localStorage.getItem("stockvision-alpha-key") || "demo",
+    alphaVantageBaseUrl: "https://www.alphavantage.co/query",
+    nominatimBaseUrl: "https://nominatim.openstreetmap.org/search",
+    offlineCacheUrl: "./data/db2026.json",
+    localCompaniesUrl: "./data/db2026.json",
+    themeStorageKey: "stockvision-theme",
 };
 
+const state = {
+    companies: [],
+    companiesBySymbol: new Map(),
+    offlineCache: null,
+    currentQuoteSymbol: "",
+    currentChartSymbol: "",
+    chart: null,
+    map: null,
+    mapTileLayer: null,
+    mapMarker: null,
+    bootstrappedToast: null,
+    requestSeq: 0,
+};
 
-/* ═══════════════════════════════════════════════════════
-   UTILS
-═══════════════════════════════════════════════════════ */
+const els = {
+    body: document.body,
+    themeToggle: document.getElementById("themeToggle"),
+    themeIcon: document.getElementById("themeIcon"),
+    companySelect: document.getElementById("companySelect"),
+    btnQuote: document.getElementById("btnQuote"),
+    btnUpdateQuote: document.getElementById("btnUpdateQuote"),
+    quoteLoading: document.getElementById("quoteLoading"),
+    quoteTableWrapper: document.getElementById("quoteTableWrapper"),
+    quoteTableBody: document.getElementById("quoteTableBody"),
+    searchInput: document.getElementById("searchInput"),
+    searchResults: document.getElementById("searchResults"),
+    chartSymbol: document.getElementById("chartSymbol"),
+    chartPeriod: document.getElementById("chartPeriod"),
+    chartType: document.getElementById("chartType"),
+    btnChart: document.getElementById("btnChart"),
+    chartBox: document.getElementById("chartBox"),
+    chartPlaceholder: document.getElementById("chartPlaceholder"),
+    chartTitle: document.getElementById("chartTitle"),
+    btnSaveChart: document.getElementById("btnSaveChart"),
+    stockChart: document.getElementById("stockChart"),
+    overviewSymbol: document.getElementById("overviewSymbol"),
+    btnOverview: document.getElementById("btnOverview"),
+    overviewCard: document.getElementById("overviewCard"),
+    mapSymbol: document.getElementById("mapSymbol"),
+    btnMap: document.getElementById("btnMap"),
+    mapContainer: document.getElementById("mapContainer"),
+    mapAddressBadge: document.getElementById("mapAddressBadge"),
+    statAziende: document.getElementById("statAziende"),
+};
 
-/**
- * Mostra una notifica toast.
- * @param {string} msg     - Testo del messaggio
- * @param {'success'|'error'|'warning'} type - Tipo
- */
-function showToast(msg, type = 'success') {
-  const toastEl = document.getElementById('liveToast');
-  const msgEl   = document.getElementById('toastMessage');
-
-  // Rimuovi classi precedenti e aggiungi quella corretta
-  toastEl.classList.remove('success', 'error', 'warning');
-  toastEl.classList.add(type);
-
-  // Icona in base al tipo
-  const icons = { success: '✓', error: '✗', warning: '⚠' };
-  msgEl.innerHTML = `<span style="margin-right:.5rem">${icons[type] || ''}</span>${msg}`;
-
-  const toast = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3500 });
-  toast.show();
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
 }
 
-/**
- * Formatta un numero con separatori delle migliaia.
- * @param {string|number} val
- * @returns {string}
- */
-function formatNum(val) {
-  const n = parseFloat(val);
-  if (isNaN(n)) return val;
-  return n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/**
- * Formatta un grande numero (volume) in forma abbreviata.
- * @param {string|number} val
- * @returns {string}
- */
-function formatVolume(val) {
-  const n = parseInt(val, 10);
-  if (isNaN(n)) return val;
-  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
-  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-  return n.toString();
+function debounce(fn, wait = 180) {
+    let timer = null;
+    return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), wait);
+    };
 }
 
-/**
- * Restituisce la classe CSS in base al segno del cambio.
- * @param {string|number} val
- * @returns {string} 'positive' | 'negative' | ''
- */
-function changeClass(val) {
-  const n = parseFloat(val);
-  if (isNaN(n)) return '';
-  return n >= 0 ? 'positive' : 'negative';
+function normalizeText(value) {
+    return String(value ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
 }
 
-/**
- * Genera dati "demo" per il grafico, simulando prezzi storici
- * a partire dall'ultimo prezzo della quotazione locale.
- * In un progetto reale questi arriverebbero da TIME_SERIES_DAILY/WEEKLY/MONTHLY.
- * @param {number} basePrice
- * @param {number} days
- * @returns {{ labels: string[], prices: number[] }}
- */
-function generateDemoTimeSeries(basePrice, days) {
-  const labels = [];
-  const prices = [];
-  const today  = new Date();
-  let price    = basePrice * (0.75 + Math.random() * 0.3); // punto di partenza
-
-  for (let i = days; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    // salta weekend
-    if (d.getDay() === 0 || d.getDay() === 6) continue;
-
-    labels.push(d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }));
-    // variazione casuale tra -3% e +3%
-    price *= 1 + (Math.random() - 0.48) * 0.06;
-    prices.push(parseFloat(price.toFixed(2)));
-  }
-
-  // Forza l'ultimo punto al prezzo attuale
-  if (prices.length > 0) prices[prices.length - 1] = parseFloat(basePrice);
-
-  return { labels, prices };
+function getTheme() {
+    return document.body.classList.contains("dark-mode") ? "dark" : "light";
 }
 
-
-/* ═══════════════════════════════════════════════════════
-   DARK / LIGHT MODE
-═══════════════════════════════════════════════════════ */
-
-const themeToggleBtn = document.getElementById('themeToggle');
-const themeIcon      = document.getElementById('themeIcon');
-
-/**
- * Applica il tema e aggiorna l'icona del toggle.
- * @param {'dark'|'light'} theme
- */
-function applyTheme(theme) {
-  if (theme === 'light') {
-    document.body.classList.remove('dark-mode');
-    document.body.classList.add('light-mode');
-    themeIcon.className = 'bi bi-sun-fill';
-  } else {
-    document.body.classList.remove('light-mode');
-    document.body.classList.add('dark-mode');
-    themeIcon.className = 'bi bi-moon-fill';
-  }
-  localStorage.setItem('sv_theme', theme);
-
-  // Aggiorna grafico esistente se presente
-  if (currentChart) redrawChart();
-}
-
-// Carica preferenza salvata
-const savedTheme = localStorage.getItem('sv_theme') || 'dark';
-applyTheme(savedTheme);
-
-// Toggle al click
-themeToggleBtn.addEventListener('click', () => {
-  const isLight = document.body.classList.contains('light-mode');
-  applyTheme(isLight ? 'dark' : 'light');
-});
-
-
-/* ═══════════════════════════════════════════════════════
-   INIT — Caricamento aziende da json-server
-═══════════════════════════════════════════════════════ */
-
-/** Array globale delle aziende caricato da json-server */
-let aziende = [];
-
-/** Cache delle quotazioni caricate */
-const quoteCache = {};
-
-/**
- * Carica l'elenco aziende da json-server e popola tutte le select.
- * Se json-server non è raggiungibile, usa dati di fallback.
- */
-async function loadAziende() {
-  try {
-    const res = await fetch(`${CONFIG.JSON_SERVER}/aziende`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    aziende = await res.json();
-  } catch (err) {
-    console.warn('⚠ json-server non raggiungibile, uso dati demo:', err.message);
-    // Dati di fallback se json-server è offline
-    aziende = [
-      { id: 1,  symbol: 'AAPL',  name: 'Apple Inc' },
-      { id: 2,  symbol: 'MSFT',  name: 'Microsoft Corporation' },
-      { id: 3,  symbol: 'GOOGL', name: 'Alphabet Inc' },
-      { id: 4,  symbol: 'AMZN',  name: 'Amazon.com Inc' },
-      { id: 5,  symbol: 'TSLA',  name: 'Tesla Inc' },
-      { id: 6,  symbol: 'NVDA',  name: 'NVIDIA Corporation' },
-      { id: 7,  symbol: 'IBM',   name: 'International Business Machines Corp' },
-      { id: 8,  symbol: 'SNE',   name: 'Sony Group Corporation' },
-      { id: 9,  symbol: 'BABA',  name: 'Alibaba Group Holding' },
-      { id: 10, symbol: 'XIACF', name: 'Xiaomi Corporation' },
-      { id: 11, symbol: 'META',  name: 'Meta Platforms Inc' },
-      { id: 12, symbol: 'NFLX',  name: 'Netflix Inc' },
-      { id: 13, symbol: 'INTC',  name: 'Intel Corporation' },
-      { id: 14, symbol: 'AMD',   name: 'Advanced Micro Devices Inc' },
-      { id: 15, symbol: 'ORCL',  name: 'Oracle Corporation' },
-    ];
-    showToast('json-server non trovato: usando dati demo locali', 'warning');
-  }
-
-  // Popola tutte le <select>
-  populateSelect('companySelect', aziende, '— Scegli un\'azienda —');
-  populateSelect('chartSymbol',   aziende, '— Seleziona —');
-  populateSelect('overviewSymbol',aziende, '— Seleziona —');
-  populateSelect('mapSymbol',     aziende, '— Seleziona —');
-
-  // Aggiorna stat hero
-  document.getElementById('statAziende').textContent = aziende.length;
-}
-
-/**
- * Popola una <select> con l'elenco delle aziende.
- * @param {string} selectId   - ID dell'elemento <select>
- * @param {Array}  list       - Array delle aziende
- * @param {string} placeholder- Testo primo option
- */
-function populateSelect(selectId, list, placeholder) {
-  const sel = document.getElementById(selectId);
-  if (!sel) return;
-  sel.innerHTML = `<option value="">${placeholder}</option>`;
-  list.forEach(az => {
-    const opt = document.createElement('option');
-    opt.value       = az.symbol;
-    opt.textContent = `${az.symbol} — ${az.name}`;
-    sel.appendChild(opt);
-  });
-}
-
-
-/* ═══════════════════════════════════════════════════════
-   SEZIONE 1 — GLOBAL_QUOTE
-═══════════════════════════════════════════════════════ */
-
-document.getElementById('btnQuote').addEventListener('click', loadQuote);
-document.getElementById('btnUpdateQuote').addEventListener('click', updateQuoteFromAV);
-
-/**
- * Carica la quotazione dal DB locale (json-server).
- */
-async function loadQuote() {
-  const symbol = document.getElementById('companySelect').value;
-  if (!symbol) { showToast('Seleziona un\'azienda prima!', 'warning'); return; }
-
-  const loading = document.getElementById('quoteLoading');
-  loading.style.display = 'flex';
-
-  try {
-    let quoteData;
-
-    // Prima cerca nella cache
-    if (quoteCache[symbol]) {
-      quoteData = quoteCache[symbol];
-    } else {
-      // Tenta json-server
-      try {
-        const res = await fetch(`${CONFIG.JSON_SERVER}/GLOBAL_QUOTE`);
-        if (!res.ok) throw new Error('json-server offline');
-        const quotes = await res.json();
-        // Filtra per simbolo (ricerca lato client)
-        quoteData = quotes.find(q => q.symbol.toUpperCase() === symbol.toUpperCase());
-        if (quoteData) quoteCache[symbol] = quoteData;
-      } catch {
-        quoteData = null;
-      }
+function setTheme(theme) {
+    const isDark = theme === "dark";
+    document.body.classList.toggle("dark-mode", isDark);
+    document.body.classList.toggle("light-mode", !isDark);
+    localStorage.setItem(CONFIG.themeStorageKey, theme);
+    els.themeIcon.className = isDark ? "bi bi-sun-fill" : "bi bi-moon-fill";
+    if (state.map) {
+        refreshMapTiles();
     }
-
-    if (!quoteData) {
-      // Genera dati demo se non trovati
-      quoteData = generateDemoQuote(symbol);
-      showToast(`Dati demo per ${symbol} (avvia json-server per dati reali)`, 'warning');
+    if (state.chart) {
+        refreshChartTheme();
     }
-
-    renderQuoteTable(quoteData);
-  } catch (err) {
-    showToast(`Errore nel caricamento: ${err.message}`, 'error');
-  } finally {
-    loading.style.display = 'none';
-  }
 }
 
-/**
- * Genera dati di quotazione demo per un simbolo non trovato nel DB.
- * @param {string} symbol
- * @returns {Object}
- */
-function generateDemoQuote(symbol) {
-  const base = 100 + Math.random() * 400;
-  const chg  = (Math.random() - 0.5) * 10;
-  return {
-    symbol,
-    open:            (base - 1).toFixed(4),
-    high:            (base + 2).toFixed(4),
-    low:             (base - 3).toFixed(4),
-    price:           base.toFixed(4),
-    volume:          Math.floor(Math.random() * 50_000_000).toString(),
-    latestTradingDay: new Date().toISOString().split('T')[0],
-    previousClose:   (base - chg).toFixed(4),
-    change:          chg.toFixed(4),
-    changePercent:   ((chg / (base - chg)) * 100).toFixed(4) + '%',
-  };
+function toggleTheme() {
+    setTheme(getTheme() === "dark" ? "light" : "dark");
 }
 
-/**
- * Esegue una chiamata live ad AlphaVantage e aggiorna il DB locale.
- */
-async function updateQuoteFromAV() {
-  const symbol = document.getElementById('companySelect').value;
-  if (!symbol) { showToast('Seleziona prima un\'azienda!', 'warning'); return; }
+function ensureToast() {
+    if (!state.bootstrappedToast && window.bootstrap?.Toast) {
+        const toastEl = document.getElementById("liveToast");
+        state.bootstrappedToast = bootstrap.Toast.getOrCreateInstance(toastEl, {
+            delay: 2600,
+        });
+    }
+    return state.bootstrappedToast;
+}
 
-  const loading = document.getElementById('quoteLoading');
-  loading.style.display = 'flex';
+function showToast(message, type = "success") {
+    const toastEl = document.getElementById("liveToast");
+    const body = document.getElementById("toastMessage");
+    if (!toastEl || !body) return;
+    toastEl.classList.remove("success", "error", "warning");
+    toastEl.classList.add(type);
+    body.textContent = message;
+    const toast = ensureToast();
+    if (toast) {
+        toast.show();
+    }
+}
 
-  try {
-    const url = `${CONFIG.AV_BASE}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${CONFIG.AV_KEY}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
+function setLoading(isLoading) {
+    els.quoteLoading.style.display = isLoading ? "flex" : "none";
+}
 
-    const q = json['Global Quote'];
-    if (!q || !q['01. symbol']) throw new Error('Nessun dato ricevuto (verifica API key o limite raggiunto)');
+async function requestJson(url) {
+    if (/^https?:\/\//i.test(url)) {
+        const response = await ajax.sendRequest("GET", url);
+        return response.data;
+    }
+    const response = await fetch(url, {
+        headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`);
+    }
+    return response.json();
+}
 
-    // Normalizza
-    const quoteData = {
-      symbol:           q['01. symbol'],
-      open:             q['02. open'],
-      high:             q['03. high'],
-      low:              q['04. low'],
-      price:            q['05. price'],
-      volume:           q['06. volume'],
-      latestTradingDay: q['07. latest trading day'],
-      previousClose:    q['08. previous close'],
-      change:           q['09. change'],
-      changePercent:    q['10. change percent'],
+async function loadLocalJson(url) {
+    try {
+        return await requestJson(url);
+    } catch (error) {
+        return null;
+    }
+}
+
+function deriveCompaniesFromCache(cache) {
+    const bySymbol = new Map();
+    const add = (symbol, name) => {
+        if (!symbol) return;
+        const normalized = String(symbol).trim().toUpperCase();
+        if (!bySymbol.has(normalized)) {
+            bySymbol.set(normalized, {
+                symbol: normalized,
+                name: name || normalized,
+            });
+        }
     };
 
-    quoteCache[symbol] = quoteData;
-    renderQuoteTable(quoteData);
-    showToast(`✓ Dati live di ${symbol} aggiornati!`, 'success');
-  } catch (err) {
-    showToast(`Errore AlphaVantage: ${err.message}`, 'error');
-  } finally {
-    loading.style.display = 'none';
-  }
+    (cache?.GLOBAL_QUOTE || []).forEach((item) => {
+        add(item.symbol || item["01. symbol"], item.symbol || item["01. symbol"]);
+    });
+    (cache?.OVERVIEW || []).forEach((item) => {
+        add(item.Symbol, item.Name);
+    });
+    (cache?.SYMBOL_SEARCH || []).forEach((item) => {
+        add(item["1. symbol"], item["2. name"]);
+    });
+
+    return Array.from(bySymbol.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/**
- * Renderizza i dati di quotazione nella tabella HTML.
- * @param {Object} q - Oggetto quotazione
- */
-function renderQuoteTable(q) {
-  const wrapper = document.getElementById('quoteTableWrapper');
-  const tbody   = document.getElementById('quoteTableBody');
+function loadCompaniesFromPayload(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.companies)) return payload.companies;
+    return [];
+}
 
-  const chgClass = changeClass(q.change);
-  const chgSign  = parseFloat(q.change) >= 0 ? '+' : '';
+async function loadCompanies() {
+    const candidates = [
+        CONFIG.localCompaniesUrl,
+        "http://localhost:3000/companies",
+    ];
 
-  tbody.innerHTML = `
-    <tr class="slide-in">
-      <td><span class="symbol-badge">${q.symbol}</span></td>
-      <td>$${formatNum(q.open)}</td>
-      <td>$${formatNum(q.high)}</td>
-      <td>$${formatNum(q.low)}</td>
-      <td style="font-weight:700">$${formatNum(q.price)}</td>
-      <td>${formatVolume(q.volume)}</td>
-      <td>$${formatNum(q.previousClose)}</td>
-      <td class="${chgClass}">${chgSign}${formatNum(q.change)}</td>
-      <td class="${chgClass}">${chgSign}${parseFloat(q.changePercent).toFixed(2)}%</td>
+    for (const url of candidates) {
+        const payload = await loadLocalJson(url);
+        const companies = loadCompaniesFromPayload(payload);
+        if (companies.length) {
+            return companies;
+        }
+    }
+
+    if (!state.offlineCache) {
+        state.offlineCache = await loadLocalJson(CONFIG.offlineCacheUrl);
+    }
+    return deriveCompaniesFromCache(state.offlineCache);
+}
+
+function setCompanies(companies) {
+    state.companies = companies
+        .map((item) => ({
+            symbol: String(item.symbol || item.Symbol || item["1. symbol"] || "").trim().toUpperCase(),
+            name: String(item.name || item.Name || item["2. name"] || item.symbol || item.Symbol || "").trim(),
+        }))
+        .filter((item) => item.symbol)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    state.companiesBySymbol = new Map(state.companies.map((item) => [item.symbol, item]));
+    els.statAziende.textContent = String(state.companies.length);
+}
+
+function buildSelectOptions() {
+    const options = state.companies
+        .map((company) => `<option value="${escapeHtml(company.symbol)}">${escapeHtml(company.symbol)} - ${escapeHtml(company.name)}</option>`)
+        .join("");
+
+    const placeholder = '<option value="">— Seleziona —</option>';
+    [els.companySelect, els.chartSymbol, els.overviewSymbol, els.mapSymbol].forEach((select) => {
+        if (!select) return;
+        select.innerHTML = placeholder + options;
+    });
+}
+
+function syncSelectValues(symbol, sourceId = "") {
+    [els.companySelect, els.chartSymbol, els.overviewSymbol, els.mapSymbol].forEach((select) => {
+        if (!select || select.id === sourceId) return;
+        select.value = symbol;
+    });
+}
+
+function highlightMatch(text, query) {
+    const safeText = escapeHtml(text);
+    if (!query) return safeText;
+    const pattern = new RegExp(`(${escapeRegExp(query)})`, "ig");
+    return safeText.replace(pattern, "<mark>$1</mark>");
+}
+
+function renderSearchResults(query) {
+    const normalizedQuery = normalizeText(query);
+    if (normalizedQuery.length < 2) {
+        els.searchResults.innerHTML = '<p class="no-results">Digita almeno 2 caratteri per cercare tra le aziende.</p>';
+        return;
+    }
+
+    const results = state.companies.filter((company) => {
+        const haystack = `${company.symbol} ${company.name}`;
+        return normalizeText(haystack).includes(normalizedQuery);
+    });
+
+    if (!results.length) {
+        els.searchResults.innerHTML = '<p class="no-results">Nessun risultato trovato.</p>';
+        return;
+    }
+
+    els.searchResults.innerHTML = results
+        .map((company) => `
+      <article class="search-result-card" role="button" tabindex="0" data-symbol="${escapeHtml(company.symbol)}">
+        <div class="result-symbol">${highlightMatch(company.symbol, query)}</div>
+        <div class="result-name">${highlightMatch(company.name, query)}</div>
+      </article>
+    `)
+        .join("");
+}
+
+function renderQuoteTable(quote) {
+    if (!quote) {
+        els.quoteTableWrapper.style.display = "none";
+        els.quoteTableBody.innerHTML = "";
+        return;
+    }
+
+    const changeClass = Number.parseFloat(quote.change) >= 0 ? "positive" : "negative";
+    els.quoteTableBody.innerHTML = `
+    <tr>
+      <td><span class="symbol-badge">${escapeHtml(quote.symbol)}</span></td>
+      <td>${escapeHtml(quote.open)}</td>
+      <td>${escapeHtml(quote.high)}</td>
+      <td>${escapeHtml(quote.low)}</td>
+      <td>${escapeHtml(quote.price)}</td>
+      <td>${escapeHtml(quote.volume)}</td>
+      <td>${escapeHtml(quote.previousClose)}</td>
+      <td class="${changeClass}">${escapeHtml(quote.change)}</td>
+      <td class="${changeClass}">${escapeHtml(quote.changePercent)}</td>
     </tr>
   `;
-
-  wrapper.style.display = 'block';
+    els.quoteTableWrapper.style.display = "block";
 }
 
-
-/* ═══════════════════════════════════════════════════════
-   SEZIONE 2 — SYMBOL_SEARCH (ricerca incrementale)
-═══════════════════════════════════════════════════════ */
-
-const searchInput = document.getElementById('searchInput');
-
-// Evento keyup: attiva la ricerca con almeno 2 caratteri
-searchInput.addEventListener('keyup', () => {
-  const query = searchInput.value.trim();
-  if (query.length >= 2) {
-    performSearch(query);
-  } else {
-    document.getElementById('searchResults').innerHTML = '';
-  }
-});
-
-/**
- * Filtra le aziende lato client (simulazione SYMBOL_SEARCH locale).
- * Come indicato nel PDF, json-server non supporta la ricerca full-text
- * nativa, quindi si carica l'intero array e si filtra in JS.
- * @param {string} query
- */
-function performSearch(query) {
-  const q       = query.toLowerCase();
-  const results = aziende.filter(
-    az => az.name.toLowerCase().includes(q) || az.symbol.toLowerCase().includes(q)
-  );
-  renderSearchResults(results, query);
-}
-
-/**
- * Renderizza le card dei risultati di ricerca.
- * @param {Array}  results
- * @param {string} query
- */
-function renderSearchResults(results, query) {
-  const container = document.getElementById('searchResults');
-
-  if (results.length === 0) {
-    container.innerHTML = `<p class="no-results"><i class="bi bi-search me-2"></i>Nessuna azienda trovata per "<strong>${query}</strong>"</p>`;
-    return;
-  }
-
-  // Evidenzia il testo trovato
-  const highlight = (text) => {
-    const re = new RegExp(`(${query})`, 'gi');
-    return text.replace(re, `<mark style="background:var(--accent-dim);color:var(--accent);border-radius:3px;padding:0 2px;">$1</mark>`);
-  };
-
-  container.innerHTML = results.map(az => `
-    <div class="search-result-card slide-in"
-         role="button"
-         tabindex="0"
-         aria-label="Seleziona ${az.name}"
-         onclick="selectFromSearch('${az.symbol}')"
-         onkeydown="if(event.key==='Enter')selectFromSearch('${az.symbol}')">
-      <div class="result-symbol">${highlight(az.symbol)}</div>
-      <div class="result-name">${highlight(az.name)}</div>
-    </div>
-  `).join('');
-}
-
-/**
- * Seleziona un'azienda dai risultati di ricerca e carica la quotazione.
- * @param {string} symbol
- */
-function selectFromSearch(symbol) {
-  // Imposta il simbolo nella select principale e carica la quotazione
-  const sel = document.getElementById('companySelect');
-  sel.value = symbol;
-
-  // Scorri alla sezione quotazione
-  document.getElementById('section-quote').scrollIntoView({ behavior: 'smooth' });
-  showToast(`Azienda ${symbol} selezionata`, 'success');
-  loadQuote();
-}
-
-
-/* ═══════════════════════════════════════════════════════
-   SEZIONE 3 — GRAFICI STORICI
-═══════════════════════════════════════════════════════ */
-
-let currentChart = null;   // Istanza Chart.js attiva
-let lastChartData = null;  // Ultimi dati usati per ridisegnare al cambio tema
-
-document.getElementById('btnChart').addEventListener('click', loadChart);
-
-/**
- * Carica e genera il grafico per l'azienda selezionata.
- */
-async function loadChart() {
-  const symbol  = document.getElementById('chartSymbol').value;
-  const period  = parseInt(document.getElementById('chartPeriod').value, 10);
-  const type    = document.getElementById('chartType').value;
-
-  if (!symbol) { showToast('Seleziona un\'azienda per il grafico!', 'warning'); return; }
-
-  // Cerca il prezzo base dalla quotazione locale o usa 150 come fallback
-  let basePrice = 150;
-  try {
-    const res    = await fetch(`${CONFIG.JSON_SERVER}/GLOBAL_QUOTE`);
-    const quotes = await res.json();
-    const found  = quotes.find(q => q.symbol.toUpperCase() === symbol.toUpperCase());
-    if (found) basePrice = parseFloat(found.price);
-  } catch { /* usa fallback */ }
-
-  const { labels, prices } = generateDemoTimeSeries(basePrice, period);
-  lastChartData = { symbol, type, labels, prices };
-  renderChart(symbol, type, labels, prices);
-}
-
-/**
- * Renderizza (o aggiorna) il grafico Chart.js.
- */
-function renderChart(symbol, type, labels, prices) {
-  const isDark   = document.body.classList.contains('dark-mode');
-  const accentColor = isDark ? '#00e5a0' : '#0066cc';
-  const gridColor   = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
-  const textColor   = isDark ? '#8b93a8' : '#4a5168';
-
-  document.getElementById('chartPlaceholder').style.display = 'none';
-  document.getElementById('chartBox').style.display = 'block';
-  document.getElementById('chartTitle').textContent =
-    `${symbol} — Ultimi ${labels.length} giorni di trading`;
-
-  const ctx = document.getElementById('stockChart').getContext('2d');
-
-  // Distruggi il grafico precedente se esiste
-  if (currentChart) currentChart.destroy();
-
-  currentChart = new Chart(ctx, {
-    type: type,   // 'line' o 'bar'
-    data: {
-      labels,
-      datasets: [{
-        label: `${symbol} Prezzo di Chiusura ($)`,
-        data:  prices,
-        borderColor:     accentColor,
-        backgroundColor: type === 'bar'
-          ? accentColor + '66'  // bar: 40% opacity
-          : function(ctx) {     // line: gradiente
-              const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 360);
-              g.addColorStop(0, accentColor + '40');
-              g.addColorStop(1, accentColor + '00');
-              return g;
-            },
-        borderWidth: type === 'bar' ? 0 : 2,
-        pointRadius:      type === 'line' ? 3 : 0,
-        pointHoverRadius: 5,
-        pointBackgroundColor: accentColor,
-        fill: type === 'line',
-        tension: 0.4,
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      animation: { duration: 600, easing: 'easeInOutQuart' },
-      plugins: {
-        legend: {
-          display: true,
-          labels: {
-            color: textColor,
-            font: { family: "'JetBrains Mono', monospace", size: 11 },
-            boxWidth: 12,
-          }
-        },
-        tooltip: {
-          backgroundColor: isDark ? '#191d26' : '#ffffff',
-          titleColor:  accentColor,
-          bodyColor:   isDark ? '#f0f4ff' : '#0d1117',
-          borderColor: accentColor + '40',
-          borderWidth: 1,
-          padding: 10,
-          titleFont: { family: "'Syne', sans-serif", weight: 700 },
-          bodyFont:  { family: "'JetBrains Mono', monospace" },
-          callbacks: {
-            label: ctx => ` $${formatNum(ctx.parsed.y)}`
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid:  { color: gridColor },
-          ticks: {
-            color: textColor,
-            font:  { family: "'JetBrains Mono', monospace", size: 10 },
-            maxTicksLimit: 10,
-          }
-        },
-        y: {
-          grid:  { color: gridColor },
-          ticks: {
-            color: textColor,
-            font:  { family: "'JetBrains Mono', monospace", size: 10 },
-            callback: v => `$${v.toFixed(0)}`
-          }
-        }
-      }
-    }
-  });
-}
-
-/**
- * Ridisegna il grafico attuale mantenendo i dati (usato al cambio tema).
- */
-function redrawChart() {
-  if (!lastChartData) return;
-  const { symbol, type, labels, prices } = lastChartData;
-  renderChart(symbol, type, labels, prices);
-}
-
-/* Salva grafico come PNG */
-document.getElementById('btnSaveChart').addEventListener('click', () => {
-  if (!currentChart) return;
-  const a    = document.createElement('a');
-  a.href     = currentChart.toBase64Image('image/png', 1.0);
-  const sym  = document.getElementById('chartSymbol').value || 'chart';
-  a.download = `stockvision_${sym}_${new Date().toISOString().split('T')[0]}.png`;
-  a.click();
-  showToast('Grafico salvato come PNG!', 'success');
-});
-
-
-/* ═══════════════════════════════════════════════════════
-   SEZIONE 4 — COMPANY OVERVIEW
-═══════════════════════════════════════════════════════ */
-
-document.getElementById('btnOverview').addEventListener('click', loadOverview);
-
-/**
- * Carica i dati overview dal DB locale.
- */
-async function loadOverview() {
-  const symbol = document.getElementById('overviewSymbol').value;
-  if (!symbol) { showToast('Seleziona un\'azienda per l\'overview!', 'warning'); return; }
-
-  let overviewData = null;
-
-  try {
-    const res  = await fetch(`${CONFIG.JSON_SERVER}/OVERVIEW`);
-    if (!res.ok) throw new Error('json-server offline');
-    const list = await res.json();
-    overviewData = list.find(o => o.Symbol.toUpperCase() === symbol.toUpperCase());
-  } catch { /* fallback */ }
-
-  if (!overviewData) {
-    // Genera dati demo
-    const az = aziende.find(a => a.symbol === symbol) || { name: symbol };
-    overviewData = {
-      Symbol:       symbol,
-      Name:         az.name,
-      Description:  `${az.name} è una delle aziende leader nel settore tecnologico globale, con presenza in numerosi mercati internazionali.`,
-      Address:      '1 TECH STREET, SAN FRANCISCO, CA, US',
-      OfficialSite: `https://www.google.com/search?q=${encodeURIComponent(az.name)}`,
-      Sector:       'Technology',
-      MarketCap:    'N/A',
+function normalizeGlobalQuote(raw) {
+    const source = raw?.["Global Quote"] || raw?.GLOBAL_QUOTE || raw;
+    if (!source) return null;
+    return {
+        symbol: source["01. symbol"] || source.symbol || source.Symbol || "",
+        open: source["02. open"] || source["1. open"] || source.open || "",
+        high: source["03. high"] || source["2. high"] || source.high || "",
+        low: source["04. low"] || source["3. low"] || source.low || "",
+        price: source["05. price"] || source["4. close"] || source.price || "",
+        volume: source["06. volume"] || source["5. volume"] || source.volume || "",
+        latestTradingDay: source["07. latest trading day"] || source["latest trading day"] || source.latestTradingDay || "",
+        previousClose: source["08. previous close"] || source["previous close"] || source.previousClose || "",
+        change: source["09. change"] || source.change || "",
+        changePercent: source["10. change percent"] || source["change percent"] || source.changePercent || "",
     };
-    showToast('Dati demo — avvia json-server per dati reali', 'warning');
-  }
-
-  renderOverviewCard(overviewData);
-
-  // Aggiorna anche la select della mappa
-  document.getElementById('mapSymbol').value = symbol;
 }
 
-/**
- * Renderizza la card overview dell'azienda.
- * @param {Object} d - Dati overview
- */
-function renderOverviewCard(d) {
-  const card = document.getElementById('overviewCard');
+function lookupOfflineQuote(symbol) {
+    const cached = state.offlineCache?.GLOBAL_QUOTE?.find((item) => {
+        return normalizeText(item.symbol || item["01. symbol"]) === normalizeText(symbol);
+    });
+    return cached ? normalizeGlobalQuote(cached) : null;
+}
 
-  card.innerHTML = `
-    <div class="overview-card">
+async function fetchLiveQuote(symbol) {
+    const url = `${CONFIG.alphaVantageBaseUrl}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(CONFIG.alphaVantageKey)}`;
+    const response = await ajax.sendRequest("GET", url);
+    const payload = response.data;
+    if (payload?.Note || payload?.Information || payload?.Error_Message) {
+        throw new Error(payload.Note || payload.Information || payload.Error_Message);
+    }
+    return normalizeGlobalQuote(payload);
+}
+
+async function getQuote(symbol, { forceLive = false } = {}) {
+    const useLive = forceLive || (CONFIG.alphaVantageKey && CONFIG.alphaVantageKey !== "demo");
+    if (useLive) {
+        try {
+            const liveQuote = await fetchLiveQuote(symbol);
+            if (liveQuote) return liveQuote;
+        } catch (error) {
+            console.warn("Live quote failed, falling back to local cache:", error);
+        }
+    }
+    return lookupOfflineQuote(symbol);
+}
+
+async function loadQuote(symbol, { forceLive = false } = {}) {
+    if (!symbol) {
+        showToast("Seleziona un'azienda prima di caricare la quotazione.", "warning");
+        return;
+    }
+
+    const seq = ++state.requestSeq;
+    state.currentQuoteSymbol = symbol;
+    setLoading(true);
+    try {
+        const quote = await getQuote(symbol, { forceLive });
+        if (seq !== state.requestSeq) return;
+        if (!quote) {
+            throw new Error("Dati quotazione non disponibili.");
+        }
+        renderQuoteTable(quote);
+        showToast(`Quotazione caricata per ${symbol}.`, "success");
+    } catch (error) {
+        renderQuoteTable(null);
+        showToast("Impossibile caricare la quotazione.", "error");
+    } finally {
+        if (seq === state.requestSeq) {
+            setLoading(false);
+        }
+    }
+}
+
+function normalizeOverview(raw) {
+    const source = raw?.["Overview"] || raw?.OVERVIEW || raw;
+    if (!source) return null;
+    return {
+        Symbol: source.Symbol || source.symbol || "",
+        Name: source.Name || source.name || "",
+        Description: source.Description || source.description || "",
+        Address: source.Address || source.address || "",
+        OfficialSite: source.OfficialSite || source.OfficialSiteURL || source.WebSite || source.website || "",
+        Sector: source.Sector || "",
+        Industry: source.Industry || "",
+        Country: source.Country || "",
+        Exchange: source.Exchange || "",
+        MarketCapitalization: source.MarketCapitalization || source.MarketCap || "",
+        EBITDA: source.EBITDA || "",
+        PERatio: source.PERatio || "",
+        DividendYield: source.DividendYield || "",
+        FiscalYearEnd: source.FiscalYearEnd || "",
+    };
+}
+
+function lookupOfflineOverview(symbol) {
+    const cached = state.offlineCache?.OVERVIEW?.find((item) => {
+        return normalizeText(item.Symbol) === normalizeText(symbol);
+    });
+    return cached ? normalizeOverview(cached) : null;
+}
+
+async function fetchLiveOverview(symbol) {
+    const url = `${CONFIG.alphaVantageBaseUrl}?function=OVERVIEW&symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(CONFIG.alphaVantageKey)}`;
+    const response = await ajax.sendRequest("GET", url);
+    const payload = response.data;
+    if (payload?.Note || payload?.Information || payload?.Error_Message) {
+        throw new Error(payload.Note || payload.Information || payload.Error_Message);
+    }
+    return normalizeOverview(payload);
+}
+
+async function getOverview(symbol) {
+    const useLive = CONFIG.alphaVantageKey && CONFIG.alphaVantageKey !== "demo";
+    if (useLive) {
+        try {
+            const liveOverview = await fetchLiveOverview(symbol);
+            if (liveOverview) return liveOverview;
+        } catch (error) {
+            console.warn("Live overview failed, falling back to local cache:", error);
+        }
+    }
+    return lookupOfflineOverview(symbol);
+}
+
+function statItem(label, value) {
+    return `
+    <div class="overview-stat">
+      <span class="overview-stat-label">${escapeHtml(label)}</span>
+      <span class="overview-stat-val">${escapeHtml(value || "N/D")}</span>
+    </div>
+  `;
+}
+
+function renderOverview(overview) {
+    if (!overview) {
+        els.overviewCard.innerHTML = '<p class="no-results">Seleziona un’azienda per visualizzare l’overview.</p>';
+        els.overviewCard.style.display = "block";
+        return;
+    }
+
+    const symbol = overview.Symbol || "";
+    const company = state.companiesBySymbol.get(symbol) || { name: overview.Name || symbol };
+    const site = overview.OfficialSite;
+    const stats = [
+        ["Sector", overview.Sector],
+        ["Industry", overview.Industry],
+        ["Country", overview.Country],
+        ["Exchange", overview.Exchange],
+        ["Market Cap", overview.MarketCapitalization],
+        ["P/E", overview.PERatio],
+        ["EBITDA", overview.EBITDA],
+        ["Dividend Yield", overview.DividendYield],
+        ["Fiscal Year End", overview.FiscalYearEnd],
+    ];
+
+    els.overviewCard.innerHTML = `
+    <article class="overview-card">
       <div class="overview-header">
-        <div class="overview-logo" aria-hidden="true">
-          ${d.Symbol.charAt(0)}
-        </div>
+        <div class="overview-logo"><i class="bi bi-building"></i></div>
         <div>
-          <div class="overview-title">${d.Name}</div>
-          <div class="overview-symbol">${d.Symbol}</div>
+          <h3 class="overview-title">${escapeHtml(company.name || overview.Name || symbol)}</h3>
+          <div class="overview-symbol">${escapeHtml(symbol)}</div>
         </div>
       </div>
 
       <div class="overview-meta">
-        ${d.Address ? `
-          <div class="overview-meta-item">
-            <i class="bi bi-geo-alt" aria-hidden="true"></i>
-            <span>${d.Address}</span>
-          </div>` : ''}
-        ${d.OfficialSite ? `
-          <div class="overview-meta-item">
-            <i class="bi bi-globe" aria-hidden="true"></i>
-            <a href="${d.OfficialSite}" target="_blank" rel="noopener noreferrer">
-              ${d.OfficialSite.replace(/^https?:\/\//, '')}
-            </a>
-          </div>` : ''}
-        ${d.Sector ? `
-          <div class="overview-meta-item">
-            <i class="bi bi-tag" aria-hidden="true"></i>
-            <span>${d.Sector}</span>
-          </div>` : ''}
+        <div class="overview-meta-item"><i class="bi bi-geo-alt me-1"></i><span>${escapeHtml(overview.Address || "N/D")}</span></div>
+        ${site
+            ? `<div class="overview-meta-item"><i class="bi bi-link-45deg me-1"></i><a href="${escapeHtml(site)}" target="_blank" rel="noopener noreferrer">${escapeHtml(site)}</a></div>`
+            : ""
+        }
       </div>
 
-      ${d.Description ? `
-        <p class="overview-desc">${d.Description}</p>` : ''}
+      <p class="overview-desc">${escapeHtml(overview.Description || "Descrizione non disponibile.")}</p>
 
       <div class="overview-stats-grid">
-        <div class="overview-stat">
-          <span class="overview-stat-label">Simbolo</span>
-          <span class="overview-stat-val">${d.Symbol}</span>
-        </div>
-        ${d.MarketCap && d.MarketCap !== 'N/A' ? `
-        <div class="overview-stat">
-          <span class="overview-stat-label">Market Cap</span>
-          <span class="overview-stat-val">${d.MarketCap}</span>
-        </div>` : ''}
-        ${d.Sector ? `
-        <div class="overview-stat">
-          <span class="overview-stat-label">Settore</span>
-          <span class="overview-stat-val" style="font-size:.9rem">${d.Sector}</span>
-        </div>` : ''}
-        <div class="overview-stat">
-          <span class="overview-stat-label">Mercato</span>
-          <span class="overview-stat-val">NYSE</span>
-        </div>
+        ${stats.map(([label, value]) => statItem(label, value)).join("")}
       </div>
-    </div>
+    </article>
   `;
-
-  card.style.display = 'block';
+    els.overviewCard.style.display = "block";
 }
 
-
-/* ═══════════════════════════════════════════════════════
-   SEZIONE 5 — MAPPA (Leaflet + Nominatim)
-═══════════════════════════════════════════════════════ */
-
-let leafletMap    = null;
-let leafletMarker = null;
-
-document.getElementById('btnMap').addEventListener('click', showOnMap);
-
-/**
- * Carica l'indirizzo dall'overview e lo geo-localizza con Nominatim.
- */
-async function showOnMap() {
-  const symbol = document.getElementById('mapSymbol').value;
-  if (!symbol) { showToast('Seleziona un\'azienda per la mappa!', 'warning'); return; }
-
-  // Recupera l'indirizzo
-  let address = null;
-  let companyName = symbol;
-
-  try {
-    const res  = await fetch(`${CONFIG.JSON_SERVER}/OVERVIEW`);
-    const list = await res.json();
-    const data = list.find(o => o.Symbol.toUpperCase() === symbol.toUpperCase());
-    if (data) {
-      address     = data.Address;
-      companyName = data.Name;
+async function loadOverview(symbol) {
+    if (!symbol) {
+        showToast("Seleziona un'azienda prima di caricare l'overview.", "warning");
+        return;
     }
-  } catch { /* usa fallback */ }
+    try {
+        const overview = await getOverview(symbol);
+        if (!overview) throw new Error("Overview non disponibile.");
+        renderOverview(overview);
+        showToast(`Overview caricata per ${symbol}.`, "success");
+    } catch (error) {
+        renderOverview(null);
+        showToast("Impossibile caricare l'overview.", "error");
+    }
+}
 
-  if (!address) {
-    // Fallback: coordi di Silicon Valley
-    address = '1 Tech Street, San Francisco, CA, US';
-    showToast('Indirizzo non trovato nel DB — mostrando posizione di default', 'warning');
-  }
+function formatChartDate(dateString) {
+    const date = new Date(dateString);
+    return Number.isNaN(date.getTime())
+        ? dateString
+        : new Intl.DateTimeFormat("it-IT", {
+            day: "2-digit",
+            month: "short",
+        }).format(date);
+}
 
-  // Geocoding tramite Nominatim (OpenStreetMap, gratuito)
-  try {
-    const encoded = encodeURIComponent(address);
-    const geoRes  = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`,
-      { headers: { 'Accept-Language': 'it' } }
-    );
-    const geoData = await geoRes.json();
+function extractSeriesData(rawSeries, limit) {
+    if (!rawSeries) return [];
+    return Object.entries(rawSeries)
+        .sort(([dateA], [dateB]) => new Date(dateA) - new Date(dateB))
+        .slice(-limit)
+        .map(([date, values]) => ({
+            date,
+            close: Number.parseFloat(values["4. close"] || values.close || values["5. adjusted close"] || values["4. close "]) || 0,
+        }));
+}
 
-    let lat, lon;
-    if (geoData && geoData.length > 0) {
-      lat = parseFloat(geoData[0].lat);
-      lon = parseFloat(geoData[0].lon);
+function lookupOfflineSeries(symbol, limit) {
+    const entry = state.offlineCache?.TIME_SERIES_MONTHLY?.find((item) => normalizeText(item.symbol) === normalizeText(symbol));
+    const rawSeries = entry?.["Monthly Time Series"] || null;
+    return extractSeriesData(rawSeries, limit);
+}
+
+async function fetchLiveSeries(symbol, periodDays) {
+    let functionName = "TIME_SERIES_MONTHLY";
+    let seriesKey = "Monthly Time Series";
+    let limit = 12;
+
+    if (periodDays <= 30) {
+        functionName = "TIME_SERIES_DAILY_ADJUSTED";
+        seriesKey = "Time Series (Daily)";
+        limit = periodDays;
+    } else if (periodDays <= 90) {
+        functionName = "TIME_SERIES_WEEKLY";
+        seriesKey = "Weekly Time Series";
+        limit = Math.ceil(periodDays / 7);
     } else {
-      // Se il geocoding fallisce, usa coordinate di New York
-      lat = 40.7128;
-      lon = -74.0060;
-      showToast('Geocoding non riuscito: mostro posizione approssimativa', 'warning');
+        functionName = "TIME_SERIES_MONTHLY";
+        seriesKey = "Monthly Time Series";
+        limit = Math.max(12, Math.ceil(periodDays / 30));
     }
 
-    initOrUpdateMap(lat, lon, companyName, address);
-  } catch (err) {
-    showToast(`Errore mappa: ${err.message}`, 'error');
-  }
+    const url = `${CONFIG.alphaVantageBaseUrl}?function=${functionName}&symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(CONFIG.alphaVantageKey)}`;
+    const response = await ajax.sendRequest("GET", url);
+    const payload = response.data;
+    if (payload?.Note || payload?.Information || payload?.Error_Message) {
+        throw new Error(payload.Note || payload.Information || payload.Error_Message);
+    }
+
+    const rawSeries = payload?.[seriesKey] || payload?.["Monthly Time Series"] || payload?.["Weekly Time Series"] || payload?.["Time Series (Daily)"];
+    return extractSeriesData(rawSeries, limit);
 }
 
-/**
- * Inizializza o aggiorna la mappa Leaflet.
- * @param {number} lat
- * @param {number} lon
- * @param {string} name    - Nome dell'azienda
- * @param {string} address - Indirizzo
- */
-function initOrUpdateMap(lat, lon, name, address) {
-  // Crea la mappa alla prima chiamata
-  if (!leafletMap) {
-    leafletMap = L.map('map', { zoomControl: true }).setView([lat, lon], 14);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19,
-    }).addTo(leafletMap);
-  } else {
-    leafletMap.setView([lat, lon], 14);
-    if (leafletMarker) leafletMap.removeLayer(leafletMarker);
-  }
-
-  // Marker personalizzato
-  const customIcon = L.divIcon({
-    html: `<div style="
-      background:var(--accent,#00e5a0);
-      width:14px;height:14px;
-      border-radius:50%;
-      border:3px solid white;
-      box-shadow:0 0 12px rgba(0,229,160,0.7);
-    "></div>`,
-    className: '',
-    iconSize:   [14, 14],
-    iconAnchor: [7, 7],
-  });
-
-  leafletMarker = L.marker([lat, lon], { icon: customIcon })
-    .addTo(leafletMap)
-    .bindPopup(`
-      <strong style="font-family:'Syne',sans-serif">${name}</strong><br/>
-      <small>${address}</small>
-    `, { maxWidth: 280 })
-    .openPopup();
-
-  // Badge indirizzo
-  const badge = document.getElementById('mapAddressBadge');
-  badge.innerHTML = `<i class="bi bi-geo-alt-fill me-1" style="color:var(--accent)"></i>${address}`;
-  badge.style.display = 'block';
-
-  // Invalidate size (necessario se il container era nascosto)
-  setTimeout(() => leafletMap.invalidateSize(), 200);
-
-  document.getElementById('section-map').scrollIntoView({ behavior: 'smooth' });
+async function getSeries(symbol, periodDays) {
+    const useLive = CONFIG.alphaVantageKey && CONFIG.alphaVantageKey !== "demo";
+    if (useLive) {
+        try {
+            const liveSeries = await fetchLiveSeries(symbol, periodDays);
+            if (liveSeries.length) return liveSeries;
+        } catch (error) {
+            console.warn("Live time series failed, falling back to local cache:", error);
+        }
+    }
+    const fallbackLimit = periodDays <= 30 ? periodDays : periodDays <= 90 ? Math.ceil(periodDays / 7) : Math.max(12, Math.ceil(periodDays / 30));
+    return lookupOfflineSeries(symbol, fallbackLimit);
 }
 
+function refreshChartTheme() {
+    if (!state.chart) return;
+    const colors = getThemeColors();
+    state.chart.options.plugins.title.color = colors.text;
+    state.chart.options.scales.x.ticks.color = colors.muted;
+    state.chart.options.scales.y.ticks.color = colors.muted;
+    state.chart.options.scales.x.grid.color = colors.grid;
+    state.chart.options.scales.y.grid.color = colors.grid;
+    state.chart.options.plugins.legend.labels.color = colors.text;
+    state.chart.update();
+}
 
-/* ═══════════════════════════════════════════════════════
-   AVVIO
-═══════════════════════════════════════════════════════ */
+function getThemeColors() {
+    const styles = getComputedStyle(document.body);
+    return {
+        accent: styles.getPropertyValue("--accent").trim() || "#dc3545",
+        text: styles.getPropertyValue("--text-primary").trim() || "#000",
+        muted: styles.getPropertyValue("--text-secondary").trim() || "#4f4f4f",
+        grid: getTheme() === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
+        card: styles.getPropertyValue("--bg-card").trim() || "#fffeef",
+    };
+}
 
-// Carica le aziende al caricamento della pagina
-document.addEventListener('DOMContentLoaded', () => {
-  loadAziende();
+function destroyChart() {
+    if (state.chart) {
+        state.chart.destroy();
+        state.chart = null;
+    }
+}
 
-  // Navbar: evidenzia la sezione corrente durante lo scroll
-  const sections = document.querySelectorAll('section[id]');
-  const navLinks = document.querySelectorAll('.nav-link');
+function renderChart(symbol, series, periodLabel, chartType) {
+    if (!series.length) {
+        throw new Error("Serie storica non disponibile.");
+    }
 
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        navLinks.forEach(l => l.classList.remove('active'));
-        const active = document.querySelector(`.nav-link[href="#${entry.target.id}"]`);
-        if (active) active.classList.add('active');
-      }
+    destroyChart();
+    els.chartPlaceholder.style.display = "none";
+    els.chartBox.style.display = "block";
+
+    const colors = getThemeColors();
+    const labels = series.map((item) => formatChartDate(item.date));
+    const values = series.map((item) => item.close);
+    const ctx = els.stockChart.getContext("2d");
+    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+    gradient.addColorStop(0, "rgba(220, 53, 69, 0.35)");
+    gradient.addColorStop(1, "rgba(220, 53, 69, 0.02)");
+
+    state.currentChartSymbol = symbol;
+    els.chartTitle.textContent = `${symbol} - ${periodLabel}`;
+
+    state.chart = new Chart(ctx, {
+        type: chartType,
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: `${symbol} Close`,
+                    data: values,
+                    borderColor: colors.accent,
+                    backgroundColor: chartType === "bar" ? gradient : "rgba(220, 53, 69, 0.18)",
+                    tension: 0.35,
+                    fill: chartType === "line",
+                    borderWidth: 2,
+                    pointRadius: chartType === "line" ? 3 : 0,
+                    pointHoverRadius: 5,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false,
+                    labels: {
+                        color: colors.text,
+                    },
+                },
+                title: {
+                    display: true,
+                    text: `${symbol} - ${periodLabel}`,
+                    color: colors.text,
+                    font: {
+                        family: "Syne, sans-serif",
+                        size: 18,
+                        weight: "bold",
+                    },
+                },
+                tooltip: {
+                    callbacks: {
+                        label(context) {
+                            return ` ${context.dataset.label}: ${context.parsed.y.toFixed(2)}`;
+                        },
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: colors.muted,
+                        maxRotation: 0,
+                        autoSkip: true,
+                    },
+                    grid: {
+                        color: colors.grid,
+                    },
+                },
+                y: {
+                    ticks: {
+                        color: colors.muted,
+                    },
+                    grid: {
+                        color: colors.grid,
+                    },
+                },
+            },
+        },
     });
-  }, { rootMargin: '-40% 0px -40% 0px' });
+}
 
-  sections.forEach(s => observer.observe(s));
+async function loadChart(symbol, periodDays, chartType) {
+    if (!symbol) {
+        showToast("Seleziona un'azienda prima di generare il grafico.", "warning");
+        return;
+    }
+
+    try {
+        const series = await getSeries(symbol, periodDays);
+        if (!series.length) throw new Error("Serie vuota.");
+        const periodLabel = els.chartPeriod.options[els.chartPeriod.selectedIndex]?.text || `${periodDays} giorni`;
+        renderChart(symbol, series, periodLabel, chartType);
+        showToast(`Grafico generato per ${symbol}.`, "success");
+    } catch (error) {
+        els.chartPlaceholder.style.display = "flex";
+        els.chartBox.style.display = "none";
+        showToast("Impossibile generare il grafico.", "error");
+    }
+}
+
+function saveChartAsPng() {
+    if (!state.chart) {
+        showToast("Genera prima un grafico.", "warning");
+        return;
+    }
+
+    const sourceCanvas = state.chart.canvas;
+    const exportCanvas = document.createElement("canvas");
+    exportCanvas.width = sourceCanvas.width;
+    exportCanvas.height = sourceCanvas.height;
+    const ctx = exportCanvas.getContext("2d");
+    ctx.fillStyle = getThemeColors().card;
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    ctx.drawImage(sourceCanvas, 0, 0);
+
+    const link = document.createElement("a");
+    link.href = exportCanvas.toDataURL("image/png");
+    link.download = `stockvision-${state.currentChartSymbol || "chart"}.png`;
+    link.click();
+    showToast("Grafico salvato come PNG.", "success");
+}
+
+function getOfflineAddress(symbol) {
+    const overview = lookupOfflineOverview(symbol);
+    return overview?.Address || "";
+}
+
+async function geocodeAddress(address) {
+    const url = `${CONFIG.nominatimBaseUrl}?format=jsonv2&limit=1&q=${encodeURIComponent(address)}`;
+    const response = await ajax.sendRequest("GET", url);
+    const feature = response.data?.[0];
+    if (!feature) return null;
+    return {
+        lat: Number.parseFloat(feature.lat),
+        lon: Number.parseFloat(feature.lon),
+        displayName: feature.display_name || address,
+    };
+}
+
+function ensureMap() {
+    if (state.map) return state.map;
+
+    state.map = L.map("map", {
+        zoomControl: true,
+        scrollWheelZoom: false,
+    }).setView([20, 0], 2);
+
+    refreshMapTiles();
+    return state.map;
+}
+
+function refreshMapTiles() {
+    if (!state.map) return;
+    if (state.mapTileLayer) {
+        state.map.removeLayer(state.mapTileLayer);
+    }
+
+    const isDark = getTheme() === "dark";
+    const tileUrl = isDark
+        ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+
+    state.mapTileLayer = L.tileLayer(tileUrl, {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+    }).addTo(state.map);
+
+    if (state.map) {
+        setTimeout(() => state.map.invalidateSize(), 0);
+    }
+}
+
+async function showCompanyOnMap(symbol) {
+    if (!symbol) {
+        showToast("Seleziona un'azienda prima di aprire la mappa.", "warning");
+        return;
+    }
+
+    try {
+        ensureMap();
+        let overview = await getOverview(symbol);
+        if (!overview) {
+            overview = lookupOfflineOverview(symbol);
+        }
+        const address = overview?.Address || getOfflineAddress(symbol);
+        if (!address) {
+            throw new Error("Indirizzo non disponibile.");
+        }
+
+        const geo = await geocodeAddress(address);
+        if (!geo) {
+            throw new Error("Geocoding fallito.");
+        }
+
+        if (state.mapMarker) {
+            state.map.removeLayer(state.mapMarker);
+        }
+
+        state.map.setView([geo.lat, geo.lon], 13, { animate: true });
+        state.mapMarker = L.marker([geo.lat, geo.lon]).addTo(state.map);
+        state.mapMarker.bindPopup(`
+      <strong>${escapeHtml(overview?.Name || symbol)}</strong><br/>
+      ${escapeHtml(geo.displayName)}
+    `).openPopup();
+
+        els.mapAddressBadge.textContent = geo.displayName;
+        els.mapAddressBadge.style.display = "block";
+        showToast(`Mappa aggiornata per ${symbol}.`, "success");
+    } catch (error) {
+        showToast("Impossibile visualizzare la sede su mappa.", "error");
+    }
+}
+
+function selectSymbol(symbol, sourceId = "") {
+    if (!symbol) return;
+    syncSelectValues(symbol, sourceId);
+}
+
+function bindEvents() {
+    els.themeToggle.addEventListener("click", toggleTheme);
+
+    els.companySelect.addEventListener("change", () => {
+        const symbol = els.companySelect.value;
+        if (!symbol) return;
+        selectSymbol(symbol, "companySelect");
+        loadQuote(symbol);
+    });
+
+    els.btnQuote.addEventListener("click", () => {
+        const symbol = els.companySelect.value;
+        if (!symbol) {
+            showToast("Seleziona un'azienda prima di caricare la quotazione.", "warning");
+            return;
+        }
+        loadQuote(symbol);
+    });
+
+    els.btnUpdateQuote.addEventListener("click", () => {
+        const symbol = els.companySelect.value;
+        if (!symbol) {
+            showToast("Seleziona un'azienda prima di fare l'update.", "warning");
+            return;
+        }
+        loadQuote(symbol, { forceLive: true });
+    });
+
+    els.searchInput.addEventListener("keyup", debounce((event) => {
+        renderSearchResults(event.target.value);
+    }, 120));
+
+    els.searchResults.addEventListener("click", (event) => {
+        const card = event.target.closest("[data-symbol]");
+        if (!card) return;
+        const symbol = card.getAttribute("data-symbol");
+        selectSymbol(symbol);
+        els.companySelect.value = symbol;
+        loadQuote(symbol);
+    });
+
+    els.searchResults.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const card = event.target.closest("[data-symbol]");
+        if (!card) return;
+        event.preventDefault();
+        const symbol = card.getAttribute("data-symbol");
+        selectSymbol(symbol);
+        els.companySelect.value = symbol;
+        loadQuote(symbol);
+    });
+
+    els.chartSymbol.addEventListener("change", () => {
+        const symbol = els.chartSymbol.value;
+        if (!symbol) return;
+        selectSymbol(symbol, "chartSymbol");
+    });
+
+    els.btnChart.addEventListener("click", () => {
+        const symbol = els.chartSymbol.value || els.companySelect.value;
+        const periodDays = Number.parseInt(els.chartPeriod.value, 10);
+        const chartType = els.chartType.value;
+        if (!symbol) {
+            showToast("Seleziona un'azienda prima di generare il grafico.", "warning");
+            return;
+        }
+        loadChart(symbol, periodDays, chartType);
+    });
+
+    els.btnSaveChart.addEventListener("click", saveChartAsPng);
+
+    els.overviewSymbol.addEventListener("change", () => {
+        const symbol = els.overviewSymbol.value;
+        if (!symbol) return;
+        selectSymbol(symbol, "overviewSymbol");
+    });
+
+    els.btnOverview.addEventListener("click", () => {
+        const symbol = els.overviewSymbol.value || els.companySelect.value;
+        if (!symbol) {
+            showToast("Seleziona un'azienda prima di caricare l'overview.", "warning");
+            return;
+        }
+        loadOverview(symbol);
+    });
+
+    els.mapSymbol.addEventListener("change", () => {
+        const symbol = els.mapSymbol.value;
+        if (!symbol) return;
+        selectSymbol(symbol, "mapSymbol");
+    });
+
+    els.btnMap.addEventListener("click", () => {
+        const symbol = els.mapSymbol.value || els.companySelect.value;
+        if (!symbol) {
+            showToast("Seleziona un'azienda prima di aprire la mappa.", "warning");
+            return;
+        }
+        showCompanyOnMap(symbol);
+    });
+}
+
+async function init() {
+    const savedTheme = localStorage.getItem(CONFIG.themeStorageKey) || "light";
+    setTheme(savedTheme);
+    bindEvents();
+
+    state.offlineCache = await loadLocalJson(CONFIG.offlineCacheUrl);
+    const companies = await loadCompanies();
+    setCompanies(companies);
+    buildSelectOptions();
+    renderSearchResults("");
+
+    showToast("Dati locali caricati correttamente.", "success");
+}
+
+init().catch((error) => {
+    console.error(error);
+    showToast("Errore durante l'inizializzazione dell'app.", "error");
 });

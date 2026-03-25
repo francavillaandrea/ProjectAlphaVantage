@@ -6,26 +6,42 @@
 
 /* ── 0. CSS VARIABLES ─────────────────────────────── */
 :root {
-  /* Dark theme (default) */
-  --bg-base:       #0a0c10;
-  --bg-surface:    #111318;
-  --bg-elevated:   #191d26;
-  --bg-card:       #1a1f2e;
+  --accent:        #dc3545;
+  --accent-rgb:    220, 53, 69;
+  --bs-primary:    var(--accent);
+  --bs-primary-rgb: var(--accent-rgb);
+  --bs-link-color-rgb: var(--accent-rgb);
+  --bs-link-hover-color-rgb: var(--accent-rgb);
+  --bs-body-bg:    #fffeef;
+  --bs-body-color: #000000;
+  --bs-border-color: #000000;
 
-  --accent:        #00e5a0;
-  --accent-dim:    rgba(0, 229, 160, 0.12);
-  --accent-glow:   0 0 24px rgba(0, 229, 160, 0.25);
+  --body-bg-light:      #fffeef;
+  --text-color-light:   #000000;
+  --muted-color-light:   #4f4f4f;
+  --card-bg-light:      #fffeef;
+  --card-shadow-light:  rgba(0, 0, 0, 0.05);
+  --border-color-light: #000000;
 
-  --danger:        #ff4d6d;
-  --warn:          #ffd166;
-  --info:          #4cc9f0;
+  --bg-base:       var(--body-bg-light);
+  --bg-surface:    #fffdf1;
+  --bg-elevated:   #fffaf0;
+  --bg-card:       var(--card-bg-light);
 
-  --text-primary:  #f0f4ff;
-  --text-secondary:#8b93a8;
-  --text-muted:    #4a5168;
+  --accent-dim:    rgba(220, 53, 69, 0.10);
+  --accent-glow:   0 0 24px rgba(220, 53, 69, 0.18);
 
-  --border:        rgba(255, 255, 255, 0.07);
-  --border-accent: rgba(0, 229, 160, 0.3);
+  --danger:        #b02a37;
+  --warn:          #d97706;
+  --info:          #2563eb;
+
+  --text-primary:  var(--text-color-light);
+  --text-secondary: var(--muted-color-light);
+  --text-muted:    #6b6b6b;
+
+  --border:        rgba(0, 0, 0, 0.12);
+  --border-accent: rgba(220, 53, 69, 0.35);
+  --nav-bg:        rgba(255, 254, 239, 0.92);
 
   --radius-sm:     6px;
   --radius-md:     12px;
@@ -37,30 +53,36 @@
   --transition:    0.25s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 
-  --shadow-card:   0 4px 32px rgba(0,0,0,0.5);
-  --shadow-glow:   0 0 40px rgba(0, 229, 160, 0.08);
+  --shadow-card:   0 4px 32px var(--card-shadow-light);
+  --shadow-glow:   0 0 40px rgba(220, 53, 69, 0.08);
 }
 
-/* Light theme override */
-body.light-mode {
-  --bg-base:       #f0f2f7;
-  --bg-surface:    #ffffff;
-  --bg-elevated:   #f7f8fc;
-  --bg-card:       #ffffff;
+/* Dark theme override */
+body.dark-mode {
+  --bg-base:       #0a0c10;
+  --bg-surface:    #111318;
+  --bg-elevated:   #191d26;
+  --bg-card:       #1a1f2e;
 
-  --accent:        #0066cc;
-  --accent-dim:    rgba(0, 102, 204, 0.08);
-  --accent-glow:   0 0 24px rgba(0, 102, 204, 0.15);
+  --accent:        #dc3545;
+  --accent-rgb:    220, 53, 69;
+  --accent-dim:    rgba(220, 53, 69, 0.12);
+  --accent-glow:   0 0 24px rgba(220, 53, 69, 0.25);
 
-  --text-primary:  #0d1117;
-  --text-secondary:#4a5168;
-  --text-muted:    #9ca3b4;
+  --danger:        #ff6b81;
+  --warn:          #ffd166;
+  --info:          #4cc9f0;
 
-  --border:        rgba(0, 0, 0, 0.08);
-  --border-accent: rgba(0, 102, 204, 0.3);
+  --text-primary:  #f0f4ff;
+  --text-secondary:#8b93a8;
+  --text-muted:    #a0a7b8;
 
-  --shadow-card:   0 4px 24px rgba(0,0,0,0.1);
-  --shadow-glow:   0 0 40px rgba(0, 102, 204, 0.05);
+  --border:        rgba(255, 255, 255, 0.07);
+  --border-accent: rgba(220, 53, 69, 0.35);
+  --nav-bg:        rgba(10, 12, 16, 0.85);
+
+  --shadow-card:   0 4px 32px rgba(0,0,0,0.5);
+  --shadow-glow:   0 0 40px rgba(220, 53, 69, 0.10);
 }
 
 /* ── 1. RESET & BASE ──────────────────────────────── */
@@ -83,7 +105,7 @@ body {
 
 /* ── 2. NAVBAR ────────────────────────────────────── */
 #mainNav {
-  background: rgba(10, 12, 16, 0.85);
+  background: var(--nav-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
@@ -92,8 +114,8 @@ body {
   z-index: 1000;
 }
 
-body.light-mode #mainNav {
-  background: rgba(240, 242, 247, 0.9);
+body.dark-mode #mainNav {
+  background: var(--nav-bg);
 }
 
 .brand-text {
@@ -367,7 +389,7 @@ body.light-mode #mainNav {
 .btn-primary-custom {
   background: var(--accent);
   border: none;
-  color: #0a0c10;
+  color: #fff;
   font-family: var(--font-mono);
   font-size: 0.78rem;
   font-weight: 700;
@@ -380,7 +402,8 @@ body.light-mode #mainNav {
 }
 
 .btn-primary-custom:hover, .btn-primary-custom:focus {
-  background: var(--text-primary);
+  background: #b02a37;
+  color: #fff;
   transform: translateY(-1px);
   box-shadow: var(--accent-glow);
 }
