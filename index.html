@@ -15,22 +15,30 @@
         <link
             href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;700&display=swap"
             rel="stylesheet" />
-        <!-- Local libraries -->
-        <script src="libs/axios@1.13.min.js"></script>
-        <script src="libs/myAxios.js"></script>
-        <script src="libs/chart@4.2.0.umd.min.js"></script>
-        <script src="libs/myChart.js"></script>
-        <!-- Leaflet.js per mappa -->
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <!-- axios.js -->
+        <script src="./libs/axios@1.13.min.js"></script>
+
+        <!-- mapLibre -->
+        <link rel="stylesheet" href="./libs/mapLibre/dist/maplibre-gl.css" />
+        <script src="./libs/mapLibre/dist/maplibre-gl.js"> </script>
+
+        <!-- chart.js -->
+        <script src="./libs/chart@4.2.0.umd.min.js"></script>
+
+        <!--user libreries -->
+        <script src="./libs/myAxios.js"></script>
+        <script src="./libs/myChart.js"></script>
+        <script src="./libs/myMapLibre.js"></script>
+
+        <!-- Bootstrap JS -->
+        <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+        <!-- App JS -->
+        <script defer src="script.js"></script>
 
         <link rel="stylesheet" href="style.css" />
     </head>
 
     <body class="light-mode">
-        <!-- ═══════════════════════════════════════════
-       NAVBAR
-  ═══════════════════════════════════════════ -->
         <nav class="navbar navbar-expand-lg sticky-top" id="mainNav" aria-label="Navigazione principale">
             <div class="container-fluid px-4">
                 <!-- Brand -->
@@ -77,9 +85,6 @@
             </div>
         </nav>
 
-        <!-- ═══════════════════════════════════════════
-       HERO
-  ═══════════════════════════════════════════ -->
         <header class="hero-section" aria-label="Intestazione">
             <div class="hero-grid" aria-hidden="true"></div>
             <div class="container py-5">
@@ -109,9 +114,6 @@
         </header>
 
         <main class="container-fluid px-3 px-lg-5">
-            <!-- ═══════════════════════════════════════════
-         SEZIONE 1 — GLOBAL QUOTE
-    ═══════════════════════════════════════════ -->
             <section id="section-quote" class="section-block" aria-labelledby="quoteHeading">
                 <div class="section-header">
                     <span class="section-tag">01</span>
@@ -176,9 +178,6 @@
                 </div>
             </section>
 
-            <!-- ═══════════════════════════════════════════
-         SEZIONE 2 — SYMBOL SEARCH
-    ═══════════════════════════════════════════ -->
             <section id="section-search" class="section-block" aria-labelledby="searchHeading">
                 <div class="section-header">
                     <span class="section-tag">02</span>
@@ -210,9 +209,6 @@
                     aria-label="Risultati ricerca"></div>
             </section>
 
-            <!-- ═══════════════════════════════════════════
-         SEZIONE 3 — GRAFICI STORICI
-    ═══════════════════════════════════════════ -->
             <section id="section-chart" class="section-block" aria-labelledby="chartHeading">
                 <div class="section-header">
                     <span class="section-tag">03</span>
@@ -276,9 +272,6 @@
                 </div>
             </section>
 
-            <!-- ═══════════════════════════════════════════
-         SEZIONE 4 — COMPANY OVERVIEW
-    ═══════════════════════════════════════════ -->
             <section id="section-overview" class="section-block" aria-labelledby="overviewHeading">
                 <div class="section-header">
                     <span class="section-tag">04</span>
@@ -310,9 +303,6 @@
                 <div id="overviewCard" style="display: none" aria-live="polite"></div>
             </section>
 
-            <!-- ═══════════════════════════════════════════
-         SEZIONE 5 — MAPPA SEDE AZIENDALE
-    ═══════════════════════════════════════════ -->
             <section id="section-map" class="section-block" aria-labelledby="mapHeading">
                 <div class="section-header">
                     <span class="section-tag">05</span>
@@ -344,121 +334,30 @@
                 </div>
             </section>
 
-            <!-- ═══════════════════════════════════════════
-         FAQ ACCORDION (componente extra)
-    ═══════════════════════════════════════════ -->
-            <section id="section-faq" class="section-block" aria-labelledby="faqHeading">
-                <div class="section-header">
-                    <span class="section-tag">06</span>
-                    <h2 id="faqHeading" class="section-title">FAQ — Domande Frequenti</h2>
-                </div>
 
-                <div class="accordion custom-accordion" id="faqAccordion">
-                    <div class="accordion-item">
-                        <h3 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
-                                data-bs-target="#faq1" aria-expanded="false" aria-controls="faq1">
-                                <i class="bi bi-question-circle me-2" aria-hidden="true"></i>
-                                Cos'è AlphaVantage?
-                            </button>
-                        </h3>
-                        <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                            <div class="accordion-body">
-                                AlphaVantage è un'API pubblica che fornisce dati finanziari in
-                                tempo reale e storici per azioni, forex e criptovalute. Offre un
-                                piano gratuito con 25 richieste/giorno e 5 richieste/minuto.
-                            </div>
-                        </div>
+            <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 9999">
+                <div id="liveToast" class="toast custom-toast align-items-center border-0" role="alert"
+                    aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body" id="toastMessage"></div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"
+                            aria-label="Chiudi notifica"></button>
                     </div>
-
-                    <div class="accordion-item">
-                        <h3 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
-                                data-bs-target="#faq2" aria-expanded="false" aria-controls="faq2">
-                                <i class="bi bi-database me-2" aria-hidden="true"></i> Perché si
-                                usa json-server?
-                            </button>
-                        </h3>
-                        <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                            <div class="accordion-body">
-                                json-server simula un backend REST locale. Poiché AlphaVantage
-                                ha un limite di 25 richieste/giorno, i dati vengono salvati in
-                                <code>db.json</code> e le richieste vengono indirizzate al
-                                server locale per non esaurire la quota.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="accordion-item">
-                        <h3 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
-                                data-bs-target="#faq3" aria-expanded="false" aria-controls="faq3">
-                                <i class="bi bi-arrow-repeat me-2" aria-hidden="true"></i> Come
-                                aggiornare i dati live?
-                            </button>
-                        </h3>
-                        <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                            <div class="accordion-body">
-                                Utilizza il pulsante <strong>"Update"</strong> nella sezione
-                                Quotazione per effettuare una chiamata diretta ad AlphaVantage e
-                                aggiornare il database locale. Ricorda che hai 25 chiamate al
-                                giorno nel piano gratuito.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="accordion-item">
-                        <h3 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
-                                data-bs-target="#faq4" aria-expanded="false" aria-controls="faq4">
-                                <i class="bi bi-moon-stars me-2" aria-hidden="true"></i> Come
-                                funziona la Dark Mode?
-                            </button>
-                        </h3>
-                        <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                            <div class="accordion-body">
-                                Clicca l'icona luna/sole in alto a destra nella navbar. La
-                                preferenza viene salvata in <code>localStorage</code> e
-                                persistita tra i ricaricamenti della pagina.
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </main>
-
-        <!-- ═══════════════════════════════════════════
-       TOAST NOTIFICATION
-  ═══════════════════════════════════════════ -->
-        <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 9999">
-            <div id="liveToast" class="toast custom-toast align-items-center border-0" role="alert"
-                aria-live="assertive" aria-atomic="true">
-                <div class="d-flex">
-                    <div class="toast-body" id="toastMessage"></div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"
-                        aria-label="Chiudi notifica"></button>
                 </div>
             </div>
-        </div>
 
-        <!-- ═══════════════════════════════════════════
-       FOOTER
-  ═══════════════════════════════════════════ -->
-        <footer class="site-footer" role="contentinfo">
-            <div class="container text-center">
-                <p class="footer-brand">◈ Stock<span>Vision</span></p>
-                <p class="footer-meta">Classe IV INF B · ITIS G. Vallauri, Fossano</p>
-                <p class="footer-powered">
-                    Powered by
-                    <a href="https://www.alphavantage.co" target="_blank" rel="noopener noreferrer">AlphaVantage API</a>
-                </p>
-            </div>
-        </footer>
+            <footer class="site-footer" role="contentinfo">
+                <div class="container text-center">
+                    <p class="footer-brand">◈ Stock<span>Vision</span></p>
+                    <p class="footer-meta">Classe IV INF B · IIS G. Vallauri, Fossano</p>
+                    <p class="footer-powered">
+                        Powered by
+                        <a href="https://www.alphavantage.co" target="_blank" rel="noopener noreferrer">AlphaVantage
+                            API</a>
+                    </p>
+                </div>
+            </footer>
 
-        <!-- Bootstrap JS -->
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-        <!-- App JS -->
-        <script src="script.js"></script>
     </body>
 
 </html>
