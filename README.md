@@ -68,3 +68,8 @@ Apri `index.html` nel browser (o usa Live Server in VSCode).
 - da sistemare anche i dati della tabella delle quotazioni perche sono tutti o nan o undefined
 - La ricerca incremenrtale la metterei all'inizio.
 - Miglioare estetica mappa e grafici
+- Mettere Grafici a candela 
+- Downlod CSV
+- Range grafico e anni grafico 
+- change se e in profit verde altrimenti rosso
+
