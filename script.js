@@ -1,24 +1,45 @@
 "use strict";
 
 // ═══════════════════════════════════════════════════════════
-//  CONFIGURAZIONE GLOBALE
+//  CONFIGURAZIONE
 // ═══════════════════════════════════════════════════════════
 
-const AV_KEY      = "demo";  // <-- inserisci qui la tua API key AlphaVantage
+const AV_KEY      = "demo";               // sostituisci con la tua API key
 const AV_BASE     = "https://www.alphavantage.co/query";
 const JSON_SERVER = "http://localhost:3000";
 
 // ═══════════════════════════════════════════════════════════
-//  STATO DELL'APPLICAZIONE
+//  STATO
 // ═══════════════════════════════════════════════════════════
 
-let listaAziende  = [];   // array caricato da json-server /aziende
-let listaOverview = [];   // array caricato da json-server /OVERVIEW
-let chart         = null; // istanza Chart.js attiva
-let currentSymbol = "";   // simbolo dell'ultimo grafico generato
+let listaAziende        = [];   // { symbol, name }
+let listaOverview       = [];   // array overview
+let chart               = null; // istanza Chart.js
+let datiGraficoCorrente = [];   // voci per export CSV
+let currentSymbol       = "";   // simbolo ultimo grafico
 
 // ═══════════════════════════════════════════════════════════
-//  DARK / LIGHT MODE
+//  SORGENTE DATI — selettore navbar
+//  "local"  → tutto da json-server
+//  "live"   → chiamate dirette ad AlphaVantage
+// ═══════════════════════════════════════════════════════════
+
+function getSorgente() {
+    return dataSource.value;   // "local" | "live"
+}
+
+// Aggiorna la badge hero quando l'utente cambia sorgente
+dataSource.addEventListener("change", function () {
+    const isLive = getSorgente() === "live";
+    statSource.textContent = isLive ? "AlphaVantage" : "Locale";
+    showToast(isLive
+        ? "Sorgente: AlphaVantage live (attenzione al limite 25 req/giorno)"
+        : "Sorgente: JSON locale (json-server)",
+        "warning");
+});
+
+// ═══════════════════════════════════════════════════════════
+//  TEMA DARK / LIGHT
 // ═══════════════════════════════════════════════════════════
 
 function applicaTema(tema) {
@@ -34,30 +55,25 @@ function applicaTema(tema) {
     localStorage.setItem("sv_theme", tema);
 }
 
-// Carica il tema salvato in localStorage (default: light)
-// Se l'utente ha già scelto un tema lo rispetta, altrimenti usa quello del sistema
 const temaDefault = localStorage.getItem("sv_theme")
     || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 applicaTema(temaDefault);
 
 themeToggle.addEventListener("click", function () {
-    const temaAttuale = document.body.classList.contains("dark-mode") ? "dark" : "light";
-    applicaTema(temaAttuale === "dark" ? "light" : "dark");
+    const corrente = document.body.classList.contains("dark-mode") ? "dark" : "light";
+    applicaTema(corrente === "dark" ? "light" : "dark");
 });
 
 // ═══════════════════════════════════════════════════════════
-//  TOAST NOTIFICATIONS
+//  TOAST
 // ═══════════════════════════════════════════════════════════
 
 function showToast(messaggio, tipo = "success") {
     liveToast.classList.remove("success", "error", "warning");
     liveToast.classList.add(tipo);
-
     const icone = { success: "✓", error: "✗", warning: "⚠" };
     toastMessage.textContent = (icone[tipo] || "") + " " + messaggio;
-
-    const toast = bootstrap.Toast.getOrCreateInstance(liveToast, { delay: 3000 });
-    toast.show();
+    bootstrap.Toast.getOrCreateInstance(liveToast, { delay: 3200 }).show();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -66,39 +82,33 @@ function showToast(messaggio, tipo = "success") {
 
 avvioPagina();
 
-// Le funzioni che richiamano funzioni asincrone DEVONO essere anch'esse asincrone
 async function avvioPagina() {
-    // 1. Carica le aziende da json-server e popola tutte le combo box
     await caricaAziende();
-
-    // 2. Carica le overview in memoria (per la mappa e la sezione overview)
     await caricaOverview();
-
-    showToast("Dati locali caricati correttamente.", "success");
+    showToast("Dati caricati correttamente.", "success");
 }
 
 // ═══════════════════════════════════════════════════════════
-//  SEZIONE 1 — CARICAMENTO AZIENDE (json-server)
+//  SEZIONE 1 — SYMBOL_SEARCH
+//  Carica sempre dal json-server locale (Best Practice PDF):
+//  i dati anagrafici cambiano raramente.
 // ═══════════════════════════════════════════════════════════
 
 async function caricaAziende() {
     const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/symbolsearch").catch(ajax.errore);
-
     if (!httpResponse) return;
 
-    // Il JSON usa "1. symbol" e "2. name" — normalizziamo in symbol/name
+    // Il JSON usa "1. symbol" e "2. name"
     listaAziende = httpResponse.data.map(az => ({
         symbol: az["1. symbol"],
         name:   az["2. name"]
     }));
 
-    // Popola tutte le combo box della pagina
     popolaSelect(companySelect);
     popolaSelect(chartSymbol);
     popolaSelect(overviewSymbol);
     popolaSelect(mapSymbol);
 
-    // Aggiorna la statistica nell'hero
     statAziende.textContent = listaAziende.length;
 }
 
@@ -112,115 +122,7 @@ function popolaSelect(selectEl) {
     }
 }
 
-// ═══════════════════════════════════════════════════════════
-//  SEZIONE 2 — GLOBAL_QUOTE
-//  Carica la quotazione dal DB locale (json-server).
-//  Il pulsante "Update" la aggiorna direttamente da AlphaVantage.
-// ═══════════════════════════════════════════════════════════
-
-btnQuote.addEventListener("click", function () {
-    const symbol = companySelect.value;
-    if (!symbol) {
-        showToast("Seleziona prima un'azienda!", "warning");
-        return;
-    }
-    caricaQuotazioneLocale(symbol);
-});
-
-btnUpdateQuote.addEventListener("click", function () {
-    const symbol = companySelect.value;
-    if (!symbol) {
-        showToast("Seleziona prima un'azienda!", "warning");
-        return;
-    }
-    aggiornaQuotazioneLive(symbol);
-});
-
-// Caricamento della quotazione dal DB locale (json-server /GLOBAL_QUOTE)
-async function caricaQuotazioneLocale(symbol) {
-    quoteLoading.style.display      = "flex";
-    quoteTableWrapper.style.display = "none";
-
-    const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/globalquote")
-                                   .catch(ajax.errore);
-
-    quoteLoading.style.display = "none";
-
-    if (!httpResponse) return;
-
-    // Filtro lato client (Best Practice dal PDF: json-server non supporta la ricerca)
-    const quote = httpResponse.data.find(q => q.symbol.toUpperCase() === symbol.toUpperCase());
-
-    if (!quote) {
-        showToast("Quotazione non trovata nel DB locale per " + symbol, "warning");
-        return;
-    }
-
-    visualizzaQuotazione(quote);
-}
-
-// Aggiornamento live da AlphaVantage (pulsante Update)
-async function aggiornaQuotazioneLive(symbol) {
-    quoteLoading.style.display      = "flex";
-    quoteTableWrapper.style.display = "none";
-
-    const url = AV_BASE + "?function=GLOBAL_QUOTE&symbol=" + symbol + "&apikey=" + AV_KEY;
-    const httpResponse = await ajax.sendRequest("GET", url).catch(ajax.errore);
-
-    quoteLoading.style.display = "none";
-
-    if (!httpResponse) return;
-
-    const rawQuote = httpResponse.data["Global Quote"];
-    if (!rawQuote || !rawQuote["01. symbol"]) {
-        showToast("Nessun dato da AlphaVantage. Verifica la API key o il limite giornaliero.", "error");
-        return;
-    }
-
-    // Normalizza la risposta di AlphaVantage nel formato del DB locale
-    const quote = {
-        symbol:           rawQuote["01. symbol"],
-        open:             rawQuote["02. open"],
-        high:             rawQuote["03. high"],
-        low:              rawQuote["04. low"],
-        price:            rawQuote["05. price"],
-        volume:           rawQuote["06. volume"],
-        latestTradingDay: rawQuote["07. latest trading day"],
-        previousClose:    rawQuote["08. previous close"],
-        change:           rawQuote["09. change"],
-        changePercent:    rawQuote["10. change percent"],
-    };
-
-    visualizzaQuotazione(quote);
-    showToast("Quotazione live aggiornata per " + symbol + "!", "success");
-}
-
-function visualizzaQuotazione(quote) {
-    const changePositivo = parseFloat(quote.change) >= 0;
-    const classeChange   = changePositivo ? "positive" : "negative";
-
-    quoteTableBody.innerHTML = `
-        <tr>
-            <td><span class="symbol-badge">${quote.symbol}</span></td>
-            <td>$${quote.open}</td>
-            <td>$${quote.high}</td>
-            <td>$${quote.low}</td>
-            <td><strong>$${quote.price}</strong></td>
-            <td>${parseInt(quote.volume).toLocaleString("it-IT")}</td>
-            <td>$${quote.previousClose}</td>
-            <td class="${classeChange}">${changePositivo ? "+" : ""}${quote.change}</td>
-            <td class="${classeChange}">${changePositivo ? "+" : ""}${parseFloat(quote.changePercent).toFixed(2)}%</td>
-        </tr>
-    `;
-    quoteTableWrapper.style.display = "block";
-}
-
-// ═══════════════════════════════════════════════════════════
-//  SEZIONE 3 — SYMBOL_SEARCH (ricerca incrementale)
-//  Come indicato nel PDF, json-server non supporta la ricerca
-//  full-text: si filtra l'array completo lato client.
-// ═══════════════════════════════════════════════════════════
-
+// Ricerca incrementale: keyup, almeno 2 caratteri, filtro lato client
 searchInput.addEventListener("keyup", function () {
     const query = searchInput.value.trim();
     if (query.length >= 2) {
@@ -232,8 +134,6 @@ searchInput.addEventListener("keyup", function () {
 
 function cercaAziende(query) {
     const q = query.toLowerCase();
-
-    // Filtro lato client su simbolo e nome
     const risultati = listaAziende.filter(az =>
         az.symbol.toLowerCase().includes(q) || az.name.toLowerCase().includes(q)
     );
@@ -243,7 +143,6 @@ function cercaAziende(query) {
         return;
     }
 
-    // Evidenzia il testo trovato nella card
     const re = new RegExp("(" + query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi");
 
     searchResults.innerHTML = risultati.map(az => {
@@ -252,30 +151,369 @@ function cercaAziende(query) {
         return `
             <div class="search-result-card"
                  role="button" tabindex="0"
-                 data-symbol="${az.symbol}"
                  onclick="selezionaDaRicerca('${az.symbol}')"
                  onkeydown="if(event.key==='Enter') selezionaDaRicerca('${az.symbol}')">
                 <div class="result-symbol">${symHl}</div>
                 <div class="result-name">${nameHl}</div>
-            </div>
-        `;
+            </div>`;
     }).join("");
 }
 
-// Selezione di un'azienda dai risultati di ricerca:
-// sincronizza tutte le select e carica subito la quotazione
 function selezionaDaRicerca(symbol) {
     companySelect.value  = symbol;
     chartSymbol.value    = symbol;
     overviewSymbol.value = symbol;
     mapSymbol.value      = symbol;
     section_quote.scrollIntoView({ behavior: "smooth" });
-    caricaQuotazioneLocale(symbol);
+    caricaQuotazione(symbol);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SEZIONE 2 — GLOBAL_QUOTE
+//  Routing in base alla sorgente selezionata
+// ═══════════════════════════════════════════════════════════
+
+btnQuote.addEventListener("click", function () {
+    const symbol = companySelect.value;
+    if (!symbol) { showToast("Seleziona prima un'azienda!", "warning"); return; }
+    caricaQuotazione(symbol);
+});
+
+// Update Live: forza AlphaVantage indipendentemente dal selettore
+btnUpdateQuote.addEventListener("click", function () {
+    const symbol = companySelect.value;
+    if (!symbol) { showToast("Seleziona prima un'azienda!", "warning"); return; }
+    caricaQuotazioneAV(symbol);
+});
+
+async function caricaQuotazione(symbol) {
+    if (getSorgente() === "live") {
+        await caricaQuotazioneAV(symbol);
+    } else {
+        await caricaQuotazioneLocale(symbol);
+    }
+}
+
+// ── Da json-server locale ──────────────────────────────────
+async function caricaQuotazioneLocale(symbol) {
+    quoteLoading.style.display      = "flex";
+    quoteTableWrapper.style.display = "none";
+
+    const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/globalquote").catch(ajax.errore);
+    quoteLoading.style.display = "none";
+    if (!httpResponse) return;
+
+    // Filtro lato client (json-server non supporta query su campi con spazi)
+    const raw = httpResponse.data.find(q => q.symbol.toUpperCase() === symbol.toUpperCase());
+    if (!raw) {
+        showToast("Quotazione non trovata in locale per " + symbol, "warning");
+        return;
+    }
+
+    visualizzaQuotazione(normalizzaQuote(raw));
+}
+
+// ── Da AlphaVantage live ───────────────────────────────────
+async function caricaQuotazioneAV(symbol) {
+    quoteLoading.style.display      = "flex";
+    quoteTableWrapper.style.display = "none";
+
+    const url = AV_BASE + "?function=GLOBAL_QUOTE&symbol=" + symbol + "&apikey=" + AV_KEY;
+    const httpResponse = await ajax.sendRequest("GET", url).catch(ajax.errore);
+    quoteLoading.style.display = "none";
+    if (!httpResponse) return;
+
+    const rawQuote = httpResponse.data["Global Quote"];
+    if (!rawQuote || !rawQuote["01. symbol"]) {
+        showToast("Nessun dato da AlphaVantage. Controlla la API key o il limite giornaliero.", "error");
+        return;
+    }
+
+    visualizzaQuotazione(normalizzaQuote(rawQuote));
+    showToast("Quotazione live aggiornata per " + symbol + "!", "success");
+}
+
+// Normalizza entrambi i formati: {"02. open": ...} e {"open": ...}
+function normalizzaQuote(raw) {
+    return {
+        symbol:           raw["01. symbol"]            || raw.symbol            || "—",
+        open:             raw["02. open"]               || raw.open              || "—",
+        high:             raw["03. high"]               || raw.high              || "—",
+        low:              raw["04. low"]                || raw.low               || "—",
+        price:            raw["05. price"]              || raw.price             || "—",
+        volume:           raw["06. volume"]             || raw.volume            || "0",
+        latestTradingDay: raw["07. latest trading day"] || raw.latestTradingDay  || "—",
+        previousClose:    raw["08. previous close"]     || raw.previousClose     || "—",
+        change:           raw["09. change"]             || raw.change            || "0",
+        changePercent:    raw["10. change percent"]     || raw.changePercent     || "0%",
+    };
+}
+
+function visualizzaQuotazione(quote) {
+    const changeVal    = parseFloat(quote.change) || 0;
+    const classeChange = changeVal >= 0 ? "positive" : "negative";
+    const segno        = changeVal >= 0 ? "+" : "";
+    const vol          = parseInt(String(quote.volume).replace(/[^0-9]/g, "")) || 0;
+
+    quoteTableBody.innerHTML = `
+        <tr>
+            <td><span class="symbol-badge">${quote.symbol}</span></td>
+            <td>$${quote.open}</td>
+            <td>$${quote.high}</td>
+            <td>$${quote.low}</td>
+            <td><strong>$${quote.price}</strong></td>
+            <td>${vol.toLocaleString("it-IT")}</td>
+            <td>$${quote.previousClose}</td>
+            <td class="${classeChange}">${segno}${quote.change}</td>
+            <td class="${classeChange}">${segno}${parseFloat(quote.changePercent).toFixed(2)}%</td>
+        </tr>`;
+
+    quoteTableWrapper.style.display = "block";
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SEZIONE 3 — GRAFICI STORICI
+//  Line / Bar / Candlestick · Range in mesi · PNG · CSV
+// ═══════════════════════════════════════════════════════════
+
+btnChart.addEventListener("click", function () {
+    const symbol = chartSymbol.value;
+    if (!symbol) { showToast("Seleziona prima un'azienda!", "warning"); return; }
+    generaGrafico(symbol);
+});
+
+btnSaveChart.addEventListener("click", function () {
+    if (!chart) { showToast("Genera prima un grafico!", "warning"); return; }
+    myBarChart.setWhiteBackground(stockChart);
+    const link    = document.createElement("a");
+    link.href     = stockChart.toDataURL("image/png");
+    link.download = "stockvision-" + (currentSymbol || "chart") + ".png";
+    link.click();
+    showToast("Grafico salvato come PNG.", "success");
+});
+
+btnDownloadCsv.addEventListener("click", function () {
+    if (!datiGraficoCorrente.length) { showToast("Genera prima un grafico!", "warning"); return; }
+    scaricaCsv();
+});
+
+async function generaGrafico(symbol) {
+    const mesi      = parseInt(chartPeriod.value);  // 9999 = tutto
+    const tipoChart = chartType.value;              // line | bar | candlestick
+
+    let voci = [];
+
+    if (getSorgente() === "live") {
+        voci = await caricaSerieAV(symbol, mesi);
+    } else {
+        voci = await caricaSerieLocale(symbol, mesi);
+    }
+
+    if (!voci || voci.length === 0) {
+        showToast("Dati storici non trovati per " + symbol, "warning");
+        return;
+    }
+
+    datiGraficoCorrente = voci;
+    currentSymbol       = symbol;
+
+    const periodoLabel = chartPeriod.options[chartPeriod.selectedIndex].text;
+    const titolo       = symbol + " — " + periodoLabel;
+
+    chartPlaceholder.style.display = "none";
+    chartBox.style.display         = "block";
+    chartTitle.textContent         = titolo;
+
+    if (tipoChart === "candlestick") {
+        disegnaCandlestick(symbol, voci, titolo);
+    } else {
+        disegnaLineBar(symbol, voci, titolo, tipoChart);
+    }
+
+    showToast("Grafico generato per " + symbol + ".", "success");
+}
+
+// ── Serie storica da json-server ───────────────────────────
+async function caricaSerieLocale(symbol, mesi) {
+    const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/timeseries").catch(ajax.errore);
+    if (!httpResponse) return [];
+
+    const entry = httpResponse.data.find(s => s.symbol.toUpperCase() === symbol.toUpperCase());
+    if (!entry || !entry["Monthly Time Series"]) return [];
+
+    return estraiVoci(entry["Monthly Time Series"], mesi);
+}
+
+// ── Serie storica da AlphaVantage ──────────────────────────
+async function caricaSerieAV(symbol, mesi) {
+    // Sceglie il servizio in base al range
+    let funzione  = "TIME_SERIES_MONTHLY";
+    let chiaveSerie = "Monthly Time Series";
+    if (mesi <= 3) {
+        funzione    = "TIME_SERIES_DAILY";
+        chiaveSerie = "Time Series (Daily)";
+    } else if (mesi <= 12) {
+        funzione    = "TIME_SERIES_WEEKLY";
+        chiaveSerie = "Weekly Time Series";
+    }
+
+    const url = AV_BASE + "?function=" + funzione + "&symbol=" + symbol + "&apikey=" + AV_KEY;
+    const httpResponse = await ajax.sendRequest("GET", url).catch(ajax.errore);
+    if (!httpResponse) return [];
+
+    const rawSerie = httpResponse.data[chiaveSerie];
+    if (!rawSerie) {
+        showToast("Nessuna serie da AlphaVantage. Controlla la API key.", "error");
+        return [];
+    }
+    return estraiVoci(rawSerie, mesi);
+}
+
+// Ordina e taglia le voci
+function estraiVoci(rawSerie, mesi) {
+    let voci = Object.entries(rawSerie)
+        .sort(([a], [b]) => new Date(a) - new Date(b));
+    if (mesi !== 9999) {
+        voci = voci.slice(-mesi);
+    }
+    return voci;
+}
+
+// ── Grafico LINE o BAR ─────────────────────────────────────
+function disegnaLineBar(symbol, voci, titolo, tipoChart) {
+    const labels = [];
+    const values = [];
+    const colors = [];
+
+    for (let [data, candela] of voci) {
+        labels.push(data.substring(0, 7));
+        const close = parseFloat(candela["4. close"]);
+        const open  = parseFloat(candela["1. open"]);
+        values.push(close);
+        // Verde se chiusura ≥ apertura, rosso altrimenti
+        colors.push(close >= open ? "rgba(0,201,122,0.80)" : "rgba(255,77,109,0.80)");
+    }
+
+    myBarChart.setChartOptions(titolo, labels, values, colors);
+    myBarChart.getChartOptions().type = tipoChart;
+
+    if (chart) { chart.destroy(); chart = null; }
+    chart = new Chart(stockChart, myBarChart.getChartOptions());
+}
+
+// ── Grafico CANDLESTICK ────────────────────────────────────
+function disegnaCandlestick(symbol, voci, titolo) {
+    const isDark  = document.body.classList.contains("dark-mode");
+    const gridCol = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)";
+    const textCol = isDark ? "#8b93a8" : "#4a5168";
+    const bgCol   = isDark ? "#1a1f2e"  : "#ffffff";
+
+    const dataPoints = voci.map(([data, candela]) => ({
+        x: new Date(data).getTime(),
+        o: parseFloat(candela["1. open"]),
+        h: parseFloat(candela["2. high"]),
+        l: parseFloat(candela["3. low"]),
+        c: parseFloat(candela["4. close"]),
+    }));
+
+    if (chart) { chart.destroy(); chart = null; }
+
+    chart = new Chart(stockChart, {
+        type: "candlestick",
+        data: {
+            datasets: [{
+                label: symbol,
+                data: dataPoints,
+                color: {
+                    up:        "#00c97a",
+                    down:      "#ff4d6d",
+                    unchanged: "#aaa",
+                },
+                borderColor: {
+                    up:        "#00c97a",
+                    down:      "#ff4d6d",
+                    unchanged: "#aaa",
+                }
+            }]
+        },
+        options: {
+            responsive:          true,
+            maintainAspectRatio: false,
+            animation:           { duration: 500 },
+            plugins: {
+                title: {
+                    display: true,
+                    text:    titolo,
+                    color:   isDark ? "#f0f4ff" : "#0d1117",
+                    font:    { size: 15, weight: "bold", family: "Syne, sans-serif" }
+                },
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: bgCol,
+                    titleColor:      isDark ? "#f0f4ff" : "#0d1117",
+                    bodyColor:       isDark ? "#8b93a8" : "#4a5168",
+                    borderColor:     isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)",
+                    borderWidth:     1,
+                    padding:         10,
+                    callbacks: {
+                        label: function(ctx) {
+                            const d = ctx.raw;
+                            return [
+                                "  Open:  $" + d.o.toFixed(2),
+                                "  High:  $" + d.h.toFixed(2),
+                                "  Low:   $" + d.l.toFixed(2),
+                                "  Close: $" + d.c.toFixed(2),
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: "time",
+                    time: { unit: "month", displayFormats: { month: "MMM yy" } },
+                    ticks: { color: textCol, maxRotation: 0, font: { family: "JetBrains Mono, monospace", size: 10 } },
+                    grid:  { color: gridCol }
+                },
+                y: {
+                    ticks: {
+                        color: textCol,
+                        font:  { family: "JetBrains Mono, monospace", size: 10 },
+                        callback: v => "$" + v.toFixed(0)
+                    },
+                    grid: { color: gridCol }
+                }
+            }
+        }
+    });
+}
+
+// ── Download CSV ───────────────────────────────────────────
+function scaricaCsv() {
+    const righe = ["Data,Open,High,Low,Close,Volume"];
+    for (let [data, candela] of datiGraficoCorrente) {
+        righe.push([
+            data,
+            candela["1. open"],
+            candela["2. high"],
+            candela["3. low"],
+            candela["4. close"],
+            candela["5. volume"]
+        ].join(","));
+    }
+    const blob = new Blob([righe.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href     = url;
+    link.download = "stockvision-" + currentSymbol + ".csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("CSV scaricato.", "success");
 }
 
 // ═══════════════════════════════════════════════════════════
 //  SEZIONE 4 — OVERVIEW
-//  Carica i dati aziendali dal DB locale (json-server /OVERVIEW)
+//  Routing in base alla sorgente selezionata
 // ═══════════════════════════════════════════════════════════
 
 async function caricaOverview() {
@@ -286,23 +524,42 @@ async function caricaOverview() {
 
 btnOverview.addEventListener("click", function () {
     const symbol = overviewSymbol.value;
-    if (!symbol) {
-        showToast("Seleziona prima un'azienda!", "warning");
-        return;
+    if (!symbol) { showToast("Seleziona prima un'azienda!", "warning"); return; }
+
+    if (getSorgente() === "live") {
+        caricaOverviewAV(symbol);
+    } else {
+        mostraOverview(symbol);
     }
-    mostraOverview(symbol);
 });
 
+// ── Overview da json-server locale ────────────────────────
 function mostraOverview(symbol) {
-    // Filtro lato client sull'array già caricato in avvioPagina
     const dati = listaOverview.find(o => o.Symbol.toUpperCase() === symbol.toUpperCase());
-
     if (!dati) {
-        showToast("Overview non trovata nel DB locale per " + symbol, "warning");
+        showToast("Overview non trovata in locale per " + symbol, "warning");
         overviewCard.style.display = "none";
         return;
     }
+    renderOverviewCard(dati);
+}
 
+// ── Overview da AlphaVantage live ─────────────────────────
+async function caricaOverviewAV(symbol) {
+    const url = AV_BASE + "?function=OVERVIEW&symbol=" + symbol + "&apikey=" + AV_KEY;
+    const httpResponse = await ajax.sendRequest("GET", url).catch(ajax.errore);
+    if (!httpResponse) return;
+
+    const dati = httpResponse.data;
+    if (!dati || !dati.Symbol) {
+        showToast("Nessuna overview da AlphaVantage per " + symbol, "error");
+        return;
+    }
+    renderOverviewCard(dati);
+    showToast("Overview live caricata per " + symbol + ".", "success");
+}
+
+function renderOverviewCard(dati) {
     overviewCard.innerHTML = `
         <article class="overview-card">
             <div class="overview-header">
@@ -320,27 +577,25 @@ function mostraOverview(symbol) {
                 ${dati.OfficialSite ? `
                 <div class="overview-meta-item">
                     <i class="bi bi-globe me-1"></i>
-                    <a href="${dati.OfficialSite}" target="_blank" rel="noopener noreferrer">
-                        ${dati.OfficialSite}
-                    </a>
+                    <a href="${dati.OfficialSite}" target="_blank" rel="noopener">${dati.OfficialSite}</a>
                 </div>` : ""}
                 ${dati.Sector ? `
                 <div class="overview-meta-item">
-                    <i class="bi bi-tag me-1"></i>
-                    <span>${dati.Sector}</span>
+                    <i class="bi bi-tag me-1"></i><span>${dati.Sector}</span>
                 </div>` : ""}
             </div>
             ${dati.Description ? `<p class="overview-desc">${dati.Description}</p>` : ""}
             <div class="overview-stats-grid">
-                ${creaStatCard("Simbolo",   dati.Symbol)}
-                ${dati.MarketCap ? creaStatCard("Market Cap", dati.MarketCap) : ""}
-                ${dati.Sector    ? creaStatCard("Settore",    dati.Sector)    : ""}
-                ${dati.Exchange  ? creaStatCard("Exchange",   dati.Exchange)  : ""}
+                ${creaStatCard("Simbolo",    dati.Symbol)}
+                ${dati.MarketCapitalization ? creaStatCard("Market Cap", dati.MarketCapitalization) : ""}
+                ${dati.Sector              ? creaStatCard("Settore",    dati.Sector)               : ""}
+                ${dati.Exchange            ? creaStatCard("Exchange",   dati.Exchange)             : ""}
+                ${dati.PERatio             ? creaStatCard("P/E Ratio",  dati.PERatio)              : ""}
+                ${dati.DividendYield       ? creaStatCard("Dividendo",  dati.DividendYield)        : ""}
             </div>
-        </article>
-    `;
+        </article>`;
     overviewCard.style.display = "block";
-    showToast("Overview caricata per " + symbol + ".", "success");
+    showToast("Overview caricata per " + dati.Symbol + ".", "success");
 }
 
 function creaStatCard(label, valore) {
@@ -348,134 +603,23 @@ function creaStatCard(label, valore) {
         <div class="overview-stat">
             <span class="overview-stat-label">${label}</span>
             <span class="overview-stat-val">${valore || "N/D"}</span>
-        </div>
-    `;
+        </div>`;
 }
 
 // ═══════════════════════════════════════════════════════════
-//  SEZIONE 5 — GRAFICI STORICI (myBarChart + Chart.js)
-//  Usa la classe MyBarChart (myChart.js) esattamente come
-//  in indexStile.js: setChartOptions() + new Chart()
-// ═══════════════════════════════════════════════════════════
-
-btnChart.addEventListener("click", function () {
-    const symbol = chartSymbol.value;
-    if (!symbol) {
-        showToast("Seleziona prima un'azienda!", "warning");
-        return;
-    }
-    generaGrafico(symbol);
-});
-
-async function generaGrafico(symbol) {
-    const periodo   = parseInt(chartPeriod.value);
-    const tipoChart = chartType.value;   // "line" o "bar"
-
-    // Carica la serie storica dal DB locale (json-server /TIME_SERIES_MONTHLY)
-    const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/timeseries")
-                                   .catch(ajax.errore);
-
-    if (!httpResponse) return;
-
-    // Filtra lato client per il simbolo selezionato
-    const serieEntry = httpResponse.data.find(
-        s => s.symbol.toUpperCase() === symbol.toUpperCase()
-    );
-
-    if (!serieEntry || !serieEntry["Monthly Time Series"]) {
-        showToast("Dati storici non trovati per " + symbol, "warning");
-        return;
-    }
-
-    // Ordina dal più vecchio al più recente e prende gli ultimi N periodi
-    const rawSerie = serieEntry["Monthly Time Series"];
-    const voci = Object.entries(rawSerie)
-        .sort(([a], [b]) => new Date(a) - new Date(b))
-        .slice(-periodo);
-
-    // Prepara i vettori per myBarChart (stesso stile di indexStile.js)
-    const labels = [];
-    const values = [];
-    const colors = [];
-
-    for (let [data, candela] of voci) {
-        labels.push(data.substring(0, 7));           // "YYYY-MM"
-        values.push(parseFloat(candela["4. close"]));
-        colors.push(generaColore());
-    }
-
-    const titolo = symbol + " — Prezzi chiusura (" + chartPeriod.options[chartPeriod.selectedIndex].text + ")";
-
-    // Aggiorna le opzioni tramite myBarChart
-    myBarChart.setChartOptions(titolo, labels, values, colors);
-
-    // Sovrascrive il tipo scelto dall'utente (line o bar)
-    myBarChart.getChartOptions().type = tipoChart;
-
-    chartPlaceholder.style.display = "none";
-    chartBox.style.display         = "block";
-    chartTitle.textContent         = titolo;
-    currentSymbol = symbol;
-
-    if (!chart) {
-        // Prima creazione: istanzia Chart.js con le opzioni di myBarChart
-        chart = new Chart(stockChart, myBarChart.getChartOptions());
-    } else {
-        // Aggiornamento: modifica il chart esistente e chiama update()
-        chart.config.type                             = tipoChart;
-        chart.config.data.labels                      = labels;
-        chart.config.data.datasets[0].data            = values;
-        chart.config.data.datasets[0].backgroundColor = colors;
-        chart.config.options.plugins.title.text       = titolo;
-        chart.update();
-    }
-
-    showToast("Grafico generato per " + symbol + ".", "success");
-}
-
-// Genera un colore RGB casuale (come la funzione random() di indexStile.js)
-function generaColore() {
-    const r = Math.floor(Math.random() * 256);
-    const g = Math.floor(Math.random() * 256);
-    const b = Math.floor(Math.random() * 256);
-    return `rgb(${r},${g},${b})`;
-}
-
-// Salva il grafico come immagine PNG (requisito 6 del PDF)
-btnSaveChart.addEventListener("click", function () {
-    if (!chart) {
-        showToast("Genera prima un grafico!", "warning");
-        return;
-    }
-    // Imposta sfondo bianco prima dell'export (metodo di myBarChart)
-    myBarChart.setWhiteBackground(stockChart);
-
-    const link    = document.createElement("a");
-    link.href     = stockChart.toDataURL("image/png");
-    link.download = "stockvision-" + (currentSymbol || "chart") + ".png";
-    link.click();
-
-    showToast("Grafico salvato come PNG.", "success");
-});
-
-// ═══════════════════════════════════════════════════════════
-//  SEZIONE 6 — MAPPA (myMapLibre)
-//  Usa myMapLibre.geocode() + myMapLibre.drawMap()
-//  + myMapLibre.addMarker() come in indexStile.js
+//  SEZIONE 5 — MAPPA (myMapLibre)
+//  Usa sempre l'overview locale per l'indirizzo
 // ═══════════════════════════════════════════════════════════
 
 btnMap.addEventListener("click", function () {
     const symbol = mapSymbol.value;
-    if (!symbol) {
-        showToast("Seleziona prima un'azienda!", "warning");
-        return;
-    }
+    if (!symbol) { showToast("Seleziona prima un'azienda!", "warning"); return; }
     mostraSedeSuMappa(symbol);
 });
 
 async function mostraSedeSuMappa(symbol) {
-    // Recupera l'indirizzo dall'overview già caricata in memoria
-    const datiOverview = listaOverview.find(o => o.Symbol.toUpperCase() === symbol.toUpperCase());
+    // Cerca prima nel db locale, poi eventualmente nell'overview live già in memoria
+    let datiOverview = listaOverview.find(o => o.Symbol.toUpperCase() === symbol.toUpperCase());
 
     if (!datiOverview || !datiOverview.Address) {
         showToast("Indirizzo non disponibile per " + symbol + ". Carica prima l'Overview.", "warning");
@@ -484,27 +628,20 @@ async function mostraSedeSuMappa(symbol) {
 
     const indirizzo = datiOverview.Address;
 
-    // Geocoding tramite myMapLibre (MapTiler API)
     const gpsAddress = await myMapLibre.geocode(indirizzo);
-    if (!gpsAddress) {
-        // La libreria mostra già un alert() se l'indirizzo non è valido
-        return;
-    }
+    if (!gpsAddress) return;
 
-    // Disegna la mappa (o sposta il centro se già inizializzata)
     await myMapLibre.drawMap(myMapLibre.openMapsStyle, "map", gpsAddress, 13);
 
-    // Aggiunge marker con popup contenente nome aziendale e indirizzo
     const popupHTML = `
         <strong>${datiOverview.Name}</strong><br/>
         <small>${indirizzo}</small>
         ${datiOverview.OfficialSite
             ? `<br/><a href="${datiOverview.OfficialSite}" target="_blank">Sito Ufficiale</a>`
-            : ""}
-    `;
+            : ""}`;
+
     await myMapLibre.addMarker(gpsAddress, "", datiOverview.Symbol, popupHTML);
 
-    // Aggiorna il badge indirizzo sotto la mappa
     mapAddressBadge.innerHTML     = '<i class="bi bi-geo-alt-fill me-1"></i>' + indirizzo;
     mapAddressBadge.style.display = "block";
 

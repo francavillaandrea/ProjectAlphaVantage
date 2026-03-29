@@ -1,363 +1,341 @@
 <!doctype html>
 <html lang="it">
 
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>StockVision — AlphaVantage Dashboard</title>
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StockVision — AlphaVantage Dashboard</title>
 
-        <!-- Bootstrap 5 -->
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
-        <!-- Bootstrap Icons -->
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
-            rel="stylesheet" />
-        <!-- Google Fonts: Syne (display) + JetBrains Mono (data) -->
-        <link
-            href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;700&display=swap"
-            rel="stylesheet" />
-        <!-- axios.js -->
-        <script src="./libs/axios@1.13.min.js"></script>
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet" />
 
-        <!-- mapLibre -->
-        <link rel="stylesheet" href="./libs/mapLibre/dist/maplibre-gl.css" />
-        <script src="./libs/mapLibre/dist/maplibre-gl.js"> </script>
+    <!-- Librerie locali -->
+    <script src="./libs/axios@1.13.min.js"></script>
+    <link rel="stylesheet" href="./libs/mapLibre/dist/maplibre-gl.css" />
+    <script src="./libs/mapLibre/dist/maplibre-gl.js"></script>
+    <script src="./libs/chart@4.2.0.umd.min.js"></script>
 
-        <!-- chart.js -->
-        <script src="./libs/chart@4.2.0.umd.min.js"></script>
+    <!-- Chart.js Financial plugin (candlestick) + adapter date -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.1/dist/chartjs-chart-financial.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
 
-        <!--user libreries -->
-        <script src="./libs/myAxios.js"></script>
-        <script src="./libs/myChart.js"></script>
-        <script src="./libs/myMapLibre.js"></script>
+    <!-- Librerie custom del professore -->
+    <script src="./libs/myAxios.js"></script>
+    <script src="./libs/myChart.js"></script>
+    <script src="./libs/myMapLibre.js"></script>
 
-        <!-- Bootstrap JS -->
-        <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-        <!-- App JS -->
-        <script defer src="script.js"></script>
+    <!-- Bootstrap JS -->
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- App -->
+    <script defer src="script.js"></script>
 
-        <link rel="stylesheet" href="style.css" />
-    </head>
+    <link rel="stylesheet" href="style.css" />
+</head>
 
-    <body class="light-mode">
-        <nav class="navbar navbar-expand-lg sticky-top" id="mainNav" aria-label="Navigazione principale">
-            <div class="container-fluid px-4">
-                <!-- Brand -->
-                <a class="navbar-brand d-flex align-items-center gap-2" href="#">
-                    <span class="brand-icon" aria-hidden="true">◈</span>
-                    <span class="brand-text">Stock<span class="brand-accent">Vision</span></span>
-                </a>
+<body class="light-mode">
+
+    <!-- ══════════════════════════════════════════════
+         NAVBAR
+    ══════════════════════════════════════════════ -->
+    <nav class="navbar navbar-expand-lg sticky-top" id="mainNav">
+        <div class="container-fluid px-4">
+
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <span class="brand-icon" aria-hidden="true">◈</span>
+                <span class="brand-text">Stock<span class="brand-accent">Vision</span></span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3 ms-auto">
+                <!-- Selettore sorgente dati -->
+                <div class="source-selector d-flex align-items-center gap-2">
+                    <span class="source-label">Sorgente:</span>
+                    <select id="dataSource" class="source-select" aria-label="Sorgente dati">
+                        <option value="local">📁 JSON locale</option>
+                        <option value="live">🌐 AlphaVantage</option>
+                    </select>
+                </div>
 
                 <!-- Dark Mode Toggle -->
-                <div class="d-flex align-items-center gap-3 ms-auto">
-                    <button class="theme-toggle" id="themeToggle" aria-label="Cambia tema chiaro/scuro"
-                        title="Cambia tema">
-                        <i class="bi bi-moon-fill" id="themeIcon"></i>
+                <button class="theme-toggle" id="themeToggle" aria-label="Cambia tema" title="Cambia tema">
+                    <i class="bi bi-moon-fill" id="themeIcon"></i>
+                </button>
+
+                <!-- Hamburger -->
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#navMenu" aria-expanded="false" aria-label="Apri menu">
+                    <i class="bi bi-list"></i>
+                </button>
+            </div>
+
+            <div class="collapse navbar-collapse" id="navMenu">
+                <ul class="navbar-nav ms-auto gap-1">
+                    <li class="nav-item"><a class="nav-link" href="#section-search"><i class="bi bi-search me-1"></i>Ricerca</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#section-quote"><i class="bi bi-graph-up-arrow me-1"></i>Quotazione</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#section-chart"><i class="bi bi-bar-chart-line me-1"></i>Grafici</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#section-overview"><i class="bi bi-building me-1"></i>Overview</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#section-map"><i class="bi bi-geo-alt me-1"></i>Mappa</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ══════════════════════════════════════════════
+         HERO
+    ══════════════════════════════════════════════ -->
+    <header class="hero-section">
+        <div class="hero-grid" aria-hidden="true"></div>
+        <div class="container py-5">
+            <div class="hero-content text-center">
+                <p class="hero-eyebrow">REAL-TIME MARKET DATA</p>
+                <h1 class="hero-title">Mercati Finanziari<br /><span class="hero-accent">a Portata di Mano</span></h1>
+                <p class="hero-subtitle">Dashboard alimentata da AlphaVantage API — quotazioni live, grafici storici, analisi societarie</p>
+                <div class="hero-stats d-flex justify-content-center gap-4 flex-wrap mt-4" aria-live="polite">
+                    <div class="hero-stat-item">
+                        <span class="stat-label">AZIENDE</span>
+                        <span class="stat-val" id="statAziende">—</span>
+                    </div>
+                    <div class="hero-stat-item">
+                        <span class="stat-label">MERCATO</span>
+                        <span class="stat-val">NYSE</span>
+                    </div>
+                    <div class="hero-stat-item">
+                        <span class="stat-label">SORGENTE</span>
+                        <span class="stat-val" id="statSource">Locale</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container-fluid px-3 px-lg-5">
+
+        <!-- ── 01 RICERCA INCREMENTALE ─────────────── -->
+        <section id="section-search" class="section-block">
+            <div class="section-header">
+                <span class="section-tag">01</span>
+                <h2 class="section-title">Ricerca Incrementale Aziende</h2>
+                <p class="section-desc">Digita almeno 2 caratteri per cercare tra le aziende nel database locale.</p>
+            </div>
+            <div class="row g-3">
+                <div class="col-12 col-md-6 col-lg-5">
+                    <label for="searchInput" class="form-label field-label">
+                        <i class="bi bi-search me-1"></i> Cerca Azienda
+                    </label>
+                    <div class="search-input-wrapper">
+                        <input type="text" class="form-control custom-input" id="searchInput"
+                            placeholder="Es: Microsoft, Sony, IBM…" autocomplete="off" />
+                        <i class="bi bi-search search-icon" aria-hidden="true"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="search-results mt-3" id="searchResults" aria-live="polite"></div>
+        </section>
+
+        <!-- ── 02 QUOTAZIONE ──────────────────────── -->
+        <section id="section-quote" class="section-block">
+            <div class="section-header">
+                <span class="section-tag">02</span>
+                <h2 class="section-title">Quotazione in Tempo Reale</h2>
+                <p class="section-desc">Seleziona un'azienda per visualizzare i dati borsistici odierni.</p>
+            </div>
+
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-md-5 col-lg-4">
+                    <label for="companySelect" class="form-label field-label">
+                        <i class="bi bi-buildings me-1"></i> Seleziona Azienda
+                    </label>
+                    <div class="select-wrapper">
+                        <select class="form-select custom-select" id="companySelect">
+                            <option value="">— Scegli un'azienda —</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-12 col-md-3 col-lg-2">
+                    <button class="btn btn-primary-custom w-100" id="btnQuote">
+                        <i class="bi bi-arrow-repeat me-2"></i>Carica
                     </button>
-                    <!-- Hamburger -->
-                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu"
-                        aria-controls="navMenu" aria-expanded="false" aria-label="Apri menu">
-                        <i class="bi bi-list"></i>
+                </div>
+                <div class="col-12 col-md-2 col-lg-2">
+                    <button class="btn btn-outline-custom w-100" id="btnUpdateQuote" title="Aggiorna live da AlphaVantage">
+                        <i class="bi bi-cloud-download me-1"></i> Update Live
                     </button>
                 </div>
-
-                <!-- Nav links -->
-                <div class="collapse navbar-collapse" id="navMenu">
-                    <ul class="navbar-nav ms-auto gap-1">
-                        <li class="nav-item">
-                            <a class="nav-link" href="#section-quote"><i
-                                    class="bi bi-graph-up-arrow me-1"></i>Quotazione</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#section-search"><i class="bi bi-search me-1"></i>Ricerca</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#section-chart"><i
-                                    class="bi bi-bar-chart-line me-1"></i>Grafici</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#section-overview"><i class="bi bi-building me-1"></i>Overview</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#section-map"><i class="bi bi-geo-alt me-1"></i>Mappa</a>
-                        </li>
-                    </ul>
-                </div>
             </div>
-        </nav>
 
-        <header class="hero-section" aria-label="Intestazione">
-            <div class="hero-grid" aria-hidden="true"></div>
-            <div class="container py-5">
-                <div class="hero-content text-center">
-                    <p class="hero-eyebrow">REAL-TIME MARKET DATA</p>
-                    <h1 class="hero-title">
-                        Mercati Finanziari<br /><span class="hero-accent">a Portata di Mano</span>
-                    </h1>
-                    <p class="hero-subtitle">
-                        Dashboard alimentata da AlphaVantage API — quotazioni live, grafici
-                        storici, analisi societarie
-                    </p>
-                    <div class="hero-stats d-flex justify-content-center gap-4 flex-wrap mt-4" id="heroStats"
-                        aria-live="polite">
-                        <div class="hero-stat-item">
-                            <span class="stat-label">AZIENDE</span><span class="stat-val" id="statAziende">20</span>
-                        </div>
-                        <div class="hero-stat-item">
-                            <span class="stat-label">MERCATO</span><span class="stat-val">NYSE</span>
-                        </div>
-                        <div class="hero-stat-item">
-                            <span class="stat-label">POWERED BY</span><span class="stat-val">AlphaVantage</span>
-                        </div>
-                    </div>
-                </div>
+            <div class="loading-bar mt-3" id="quoteLoading" style="display:none">
+                <div class="loading-pulse"></div>
+                <span>Recupero dati in corso…</span>
             </div>
-        </header>
 
-        <main class="container-fluid px-3 px-lg-5">
-            <section id="section-quote" class="section-block" aria-labelledby="quoteHeading">
-                <div class="section-header">
-                    <span class="section-tag">01</span>
-                    <h2 id="quoteHeading" class="section-title">
-                        Quotazione in Tempo Reale
-                    </h2>
-                    <p class="section-desc">
-                        Seleziona un'azienda dal menu per visualizzare i dati borsistici
-                        odierni.
-                    </p>
-                </div>
+            <div class="table-wrapper mt-4" id="quoteTableWrapper" style="display:none">
+                <table class="table data-table" id="quoteTable">
+                    <thead>
+                        <tr>
+                            <th>SIMBOLO</th>
+                            <th>OPEN</th>
+                            <th>HIGH</th>
+                            <th>LOW</th>
+                            <th>PRICE</th>
+                            <th>VOLUME</th>
+                            <th>PREV. CLOSE</th>
+                            <th>CHANGE</th>
+                            <th>CHANGE %</th>
+                        </tr>
+                    </thead>
+                    <tbody id="quoteTableBody"></tbody>
+                </table>
+            </div>
+        </section>
 
-                <div class="row g-4 align-items-end">
-                    <div class="col-12 col-md-6 col-lg-4">
-                        <label for="companySelect" class="form-label field-label">
-                            <i class="bi bi-buildings me-1"></i> Seleziona Azienda
-                        </label>
-                        <div class="select-wrapper">
-                            <select class="form-select custom-select" id="companySelect" aria-label="Seleziona azienda">
-                                <option value="">— Scegli un'azienda —</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-4 col-lg-3">
-                        <button class="btn btn-primary-custom w-100" id="btnQuote" aria-label="Carica quotazione">
-                            <i class="bi bi-arrow-repeat me-2"></i>Carica Quotazione
-                        </button>
-                    </div>
-                    <div class="col-12 col-md-2 col-lg-2">
-                        <button class="btn btn-outline-custom w-100" id="btnUpdateQuote"
-                            aria-label="Aggiorna da AlphaVantage" title="Aggiorna dati live da AlphaVantage">
-                            <i class="bi bi-cloud-download me-1"></i> Update
-                        </button>
-                    </div>
-                </div>
+        <!-- ── 03 GRAFICI ─────────────────────────── -->
+        <section id="section-chart" class="section-block">
+            <div class="section-header">
+                <span class="section-tag">03</span>
+                <h2 class="section-title">Grafici Storici</h2>
+                <p class="section-desc">Visualizza l'andamento del prezzo su diversi periodi temporali.</p>
+            </div>
 
-                <!-- Loading spinner -->
-                <div class="loading-bar mt-3" id="quoteLoading" role="status" aria-label="Caricamento in corso"
-                    style="display: none">
-                    <div class="loading-pulse"></div>
-                    <span>Recupero dati in corso…</span>
-                </div>
-
-                <!-- Quote Table -->
-                <div class="table-wrapper mt-4" id="quoteTableWrapper" style="display: none" aria-live="polite">
-                    <table class="table data-table" id="quoteTable" aria-label="Dati quotazione">
-                        <thead>
-                            <tr>
-                                <th scope="col">SIMBOLO</th>
-                                <th scope="col">OPEN</th>
-                                <th scope="col">HIGH</th>
-                                <th scope="col">LOW</th>
-                                <th scope="col">PRICE</th>
-                                <th scope="col">VOLUME</th>
-                                <th scope="col">PREV. CLOSE</th>
-                                <th scope="col">CHANGE</th>
-                                <th scope="col">CHANGE %</th>
-                            </tr>
-                        </thead>
-                        <tbody id="quoteTableBody"></tbody>
-                    </table>
-                </div>
-            </section>
-
-            <section id="section-search" class="section-block" aria-labelledby="searchHeading">
-                <div class="section-header">
-                    <span class="section-tag">02</span>
-                    <h2 id="searchHeading" class="section-title">
-                        Ricerca Incrementale Aziende
-                    </h2>
-                    <p class="section-desc">
-                        Digita almeno 2 caratteri per cercare tra le aziende nel database
-                        locale.
-                    </p>
-                </div>
-
-                <div class="row g-3">
-                    <div class="col-12 col-md-6 col-lg-5">
-                        <label for="searchInput" class="form-label field-label">
-                            <i class="bi bi-search me-1"></i> Cerca Azienda
-                        </label>
-                        <div class="search-input-wrapper">
-                            <input type="text" class="form-control custom-input" id="searchInput"
-                                placeholder="Es: Apple, Tesla, IBM…" aria-label="Cerca azienda per nome"
-                                autocomplete="off" />
-                            <i class="bi bi-search search-icon" aria-hidden="true"></i>
-                        </div>
+            <div class="row g-3 align-items-end mb-4">
+                <div class="col-6 col-sm-4 col-lg-2">
+                    <label for="chartSymbol" class="form-label field-label">Simbolo</label>
+                    <div class="select-wrapper">
+                        <select class="form-select custom-select" id="chartSymbol">
+                            <option value="">— Seleziona —</option>
+                        </select>
                     </div>
                 </div>
-
-                <!-- Risultati ricerca -->
-                <div class="search-results mt-3" id="searchResults" role="region" aria-live="polite"
-                    aria-label="Risultati ricerca"></div>
-            </section>
-
-            <section id="section-chart" class="section-block" aria-labelledby="chartHeading">
-                <div class="section-header">
-                    <span class="section-tag">03</span>
-                    <h2 id="chartHeading" class="section-title">Grafici Storici</h2>
-                    <p class="section-desc">
-                        Visualizza l'andamento del prezzo di chiusura su diversi periodi
-                        temporali.
-                    </p>
-                </div>
-
-                <div class="row g-3 align-items-end mb-4">
-                    <div class="col-12 col-sm-6 col-lg-3">
-                        <label for="chartSymbol" class="form-label field-label">Simbolo</label>
-                        <div class="select-wrapper">
-                            <select class="form-select custom-select" id="chartSymbol" aria-label="Simbolo per grafico">
-                                <option value="">— Seleziona —</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-12 col-sm-6 col-lg-3">
-                        <label for="chartPeriod" class="form-label field-label">Periodo</label>
-                        <div class="select-wrapper">
-                            <select class="form-select custom-select" id="chartPeriod" aria-label="Periodo grafico">
-                                <option value="7">Ultima settimana</option>
-                                <option value="30" selected>Ultimo mese</option>
-                                <option value="90">Ultimi 3 mesi</option>
-                                <option value="365">Ultimo anno</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-12 col-sm-6 col-lg-3">
-                        <label for="chartType" class="form-label field-label">Tipo Grafico</label>
-                        <div class="select-wrapper">
-                            <select class="form-select custom-select" id="chartType" aria-label="Tipo di grafico">
-                                <option value="line">Line Chart</option>
-                                <option value="bar">Bar Chart</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-12 col-sm-6 col-lg-3">
-                        <button class="btn btn-primary-custom w-100" id="btnChart" aria-label="Genera grafico">
-                            <i class="bi bi-graph-up me-2"></i>Genera Grafico
-                        </button>
+                <div class="col-6 col-sm-4 col-lg-2">
+                    <label for="chartPeriod" class="form-label field-label">Periodo</label>
+                    <div class="select-wrapper">
+                        <select class="form-select custom-select" id="chartPeriod">
+                            <option value="6">6 mesi</option>
+                            <option value="12" selected>1 anno</option>
+                            <option value="24">2 anni</option>
+                            <option value="60">5 anni</option>
+                            <option value="120">10 anni</option>
+                            <option value="9999">Tutto</option>
+                        </select>
                     </div>
                 </div>
-
-                <div class="chart-container-wrapper">
-                    <div class="chart-box" id="chartBox" style="display: none" aria-label="Grafico andamento prezzi">
-                        <div class="chart-toolbar">
-                            <span id="chartTitle" class="chart-title-label"></span>
-                            <button class="btn-save-chart" id="btnSaveChart" aria-label="Salva grafico come immagine">
-                                <i class="bi bi-download me-1"></i> Salva PNG
-                            </button>
-                        </div>
-                        <canvas id="stockChart" role="img" aria-label="Grafico prezzi azionari"></canvas>
-                    </div>
-                    <div class="chart-placeholder" id="chartPlaceholder" aria-hidden="true">
-                        <i class="bi bi-bar-chart-line-fill placeholder-icon"></i>
-                        <p>Seleziona un'azienda e genera il grafico</p>
+                <div class="col-6 col-sm-4 col-lg-2">
+                    <label for="chartType" class="form-label field-label">Tipo</label>
+                    <div class="select-wrapper">
+                        <select class="form-select custom-select" id="chartType">
+                            <option value="line">Line Chart</option>
+                            <option value="bar">Bar Chart</option>
+                            <option value="candlestick">Candlestick</option>
+                        </select>
                     </div>
                 </div>
-            </section>
-
-            <section id="section-overview" class="section-block" aria-labelledby="overviewHeading">
-                <div class="section-header">
-                    <span class="section-tag">04</span>
-                    <h2 id="overviewHeading" class="section-title">Company Overview</h2>
-                    <p class="section-desc">
-                        Informazioni anagrafiche e finanziarie dell'azienda selezionata.
-                    </p>
+                <div class="col-6 col-sm-4 col-lg-2">
+                    <button class="btn btn-primary-custom w-100" id="btnChart">
+                        <i class="bi bi-graph-up me-1"></i> Genera
+                    </button>
                 </div>
-
-                <div class="row g-3 align-items-end mb-4">
-                    <div class="col-12 col-md-5 col-lg-4">
-                        <label for="overviewSymbol" class="form-label field-label">Seleziona Azienda</label>
-                        <div class="select-wrapper">
-                            <select class="form-select custom-select" id="overviewSymbol"
-                                aria-label="Azienda per overview">
-                                <option value="">— Seleziona —</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-4 col-lg-3">
-                        <button class="btn btn-primary-custom w-100" id="btnOverview"
-                            aria-label="Carica overview azienda">
-                            <i class="bi bi-info-circle me-2"></i>Carica Overview
-                        </button>
-                    </div>
+                <div class="col-6 col-sm-4 col-lg-2">
+                    <button class="btn btn-outline-custom w-100" id="btnSaveChart">
+                        <i class="bi bi-download me-1"></i> PNG
+                    </button>
                 </div>
-
-                <!-- Overview Card -->
-                <div id="overviewCard" style="display: none" aria-live="polite"></div>
-            </section>
-
-            <section id="section-map" class="section-block" aria-labelledby="mapHeading">
-                <div class="section-header">
-                    <span class="section-tag">05</span>
-                    <h2 id="mapHeading" class="section-title">Geo-localizzazione Sede</h2>
-                    <p class="section-desc">
-                        Visualizza la sede aziendale su mappa interattiva tramite geocoding.
-                    </p>
-                </div>
-
-                <div class="row g-3 align-items-end mb-4">
-                    <div class="col-12 col-md-5 col-lg-4">
-                        <label for="mapSymbol" class="form-label field-label">Seleziona Azienda</label>
-                        <div class="select-wrapper">
-                            <select class="form-select custom-select" id="mapSymbol" aria-label="Azienda per mappa">
-                                <option value="">— Seleziona —</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-4 col-lg-3">
-                        <button class="btn btn-primary-custom w-100" id="btnMap" aria-label="Mostra sede su mappa">
-                            <i class="bi bi-geo-alt me-2"></i>Mostra su Mappa
-                        </button>
-                    </div>
-                </div>
-
-                <div id="mapContainer" class="map-container" aria-label="Mappa sede aziendale" role="region">
-                    <div id="map"></div>
-                    <div class="map-address-badge" id="mapAddressBadge" style="display: none" aria-live="polite"></div>
-                </div>
-            </section>
-
-
-            <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 9999">
-                <div id="liveToast" class="toast custom-toast align-items-center border-0" role="alert"
-                    aria-live="assertive" aria-atomic="true">
-                    <div class="d-flex">
-                        <div class="toast-body" id="toastMessage"></div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"
-                            aria-label="Chiudi notifica"></button>
-                    </div>
+                <div class="col-6 col-sm-4 col-lg-2">
+                    <button class="btn btn-outline-custom w-100" id="btnDownloadCsv">
+                        <i class="bi bi-filetype-csv me-1"></i> CSV
+                    </button>
                 </div>
             </div>
 
-            <footer class="site-footer" role="contentinfo">
-                <div class="container text-center">
-                    <p class="footer-brand">◈ Stock<span>Vision</span></p>
-                    <p class="footer-meta">Classe IV INF B · IIS G. Vallauri, Fossano</p>
-                    <p class="footer-powered">
-                        Powered by
-                        <a href="https://www.alphavantage.co" target="_blank" rel="noopener noreferrer">AlphaVantage
-                            API</a>
-                    </p>
+            <div class="chart-container-wrapper">
+                <div class="chart-box" id="chartBox" style="display:none">
+                    <div class="chart-toolbar">
+                        <span id="chartTitle" class="chart-title-label"></span>
+                    </div>
+                    <canvas id="stockChart" aria-label="Grafico prezzi azionari"></canvas>
                 </div>
-            </footer>
+                <div class="chart-placeholder" id="chartPlaceholder">
+                    <i class="bi bi-bar-chart-line-fill placeholder-icon"></i>
+                    <p>Seleziona un'azienda e premi Genera</p>
+                </div>
+            </div>
+        </section>
 
-    </body>
+        <!-- ── 04 OVERVIEW ────────────────────────── -->
+        <section id="section-overview" class="section-block">
+            <div class="section-header">
+                <span class="section-tag">04</span>
+                <h2 class="section-title">Company Overview</h2>
+                <p class="section-desc">Informazioni anagrafiche e finanziarie dell'azienda selezionata.</p>
+            </div>
+            <div class="row g-3 align-items-end mb-4">
+                <div class="col-12 col-md-5 col-lg-4">
+                    <label for="overviewSymbol" class="form-label field-label">Seleziona Azienda</label>
+                    <div class="select-wrapper">
+                        <select class="form-select custom-select" id="overviewSymbol">
+                            <option value="">— Seleziona —</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4 col-lg-3">
+                    <button class="btn btn-primary-custom w-100" id="btnOverview">
+                        <i class="bi bi-info-circle me-2"></i>Carica Overview
+                    </button>
+                </div>
+            </div>
+            <div id="overviewCard" style="display:none" aria-live="polite"></div>
+        </section>
 
+        <!-- ── 05 MAPPA ───────────────────────────── -->
+        <section id="section-map" class="section-block">
+            <div class="section-header">
+                <span class="section-tag">05</span>
+                <h2 class="section-title">Geo-localizzazione Sede</h2>
+                <p class="section-desc">Visualizza la sede aziendale su mappa interattiva tramite geocoding.</p>
+            </div>
+            <div class="row g-3 align-items-end mb-4">
+                <div class="col-12 col-md-5 col-lg-4">
+                    <label for="mapSymbol" class="form-label field-label">Seleziona Azienda</label>
+                    <div class="select-wrapper">
+                        <select class="form-select custom-select" id="mapSymbol">
+                            <option value="">— Seleziona —</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4 col-lg-3">
+                    <button class="btn btn-primary-custom w-100" id="btnMap">
+                        <i class="bi bi-geo-alt me-2"></i>Mostra su Mappa
+                    </button>
+                </div>
+            </div>
+            <div id="mapContainer" class="map-container">
+                <div id="map"></div>
+                <div class="map-address-badge" id="mapAddressBadge" style="display:none" aria-live="polite"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Toast -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:9999">
+        <div id="liveToast" class="toast custom-toast align-items-center border-0" role="alert" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body" id="toastMessage"></div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Chiudi"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+        <div class="container text-center">
+            <p class="footer-brand">◈ Stock<span>Vision</span></p>
+            <p class="footer-meta">Classe IV INF B · IIS G. Vallauri, Fossano</p>
+            <p class="footer-powered">Powered by <a href="https://www.alphavantage.co" target="_blank" rel="noopener">AlphaVantage API</a></p>
+        </div>
+    </footer>
+
+</body>
 </html>
