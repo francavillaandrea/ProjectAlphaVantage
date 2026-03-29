@@ -26,7 +26,7 @@ npm install -g json-server
 ### 2. Avvia il backend locale
 Dalla cartella del progetto:
 ```bash
-json-server --watch db.json --port 3000
+json-server ./data/db.json
 ```
 
 ### 3. Apri il progetto
@@ -54,22 +54,11 @@ Apri `index.html` nel browser (o usa Live Server in VSCode).
 
 - **Bootstrap 5.3** — Layout responsive, componenti UI
 - **Chart.js 4.4** — Grafici line/bar con animazioni
-- **Leaflet 1.9** — Mappa interattiva OpenStreetMap
 - **Nominatim API** — Geocoding gratuito (OpenStreetMap)
 - **AlphaVantage API** — Dati finanziari live
 - **json-server** — Backend REST locale simulato
 - **Google Fonts** — Syne + JetBrains Mono
 
----
 
-# Migliorie
 
-- Theme Switcher: la tabella delle quotazioni nel tema scuro rimane bianca con testo bianco, e non si vede nulla.
-- da sistemare anche i dati della tabella delle quotazioni perche sono tutti o nan o undefined
-- La ricerca incremenrtale la metterei all'inizio.
-- Miglioare estetica mappa e grafici
-- Mettere Grafici a candela
-- Downlod CSV
-- Range grafico e anni grafico
-- change se è in profit verde altrimenti rosso
 
