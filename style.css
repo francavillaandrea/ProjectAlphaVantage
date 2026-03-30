@@ -958,3 +958,69 @@ body.dark-mode .map-address-badge {
     .data-table tbody td { padding: 0.55rem 0.65rem; }
     .search-results      { grid-template-columns: 1fr; }
 }
+
+/* ── LOGO AZIENDA ────────────────────────────────────
+   Container mostrato sopra la overview card           */
+.logo-container {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1.25rem;
+}
+
+.company-logo {
+    max-height: 80px;
+    max-width: 220px;
+    object-fit: contain;
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    padding: 0.75rem 1.25rem;
+    box-shadow: var(--shadow-card);
+    transition: transform var(--transition);
+}
+
+.company-logo:hover { transform: scale(1.04); }
+
+/* Logo dentro la overview-card (nel cerchio) */
+.overview-logo {
+    width: 60px; height: 60px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.overview-logo-img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    padding: 6px;
+}
+
+/* ── TIPI DI GRAFICO — altezze specifiche ────────────
+   Radar e Doughnut hanno proporzioni diverse           */
+#stockChart[data-type="radar"],
+#stockChart[data-type="doughnut"] {
+    height: 380px !important;
+    max-height: 380px;
+}
+
+/* ── CHANGE POSITIVO / NEGATIVO nella tabella ────────
+   Verde hard-coded perché le variabili CSS non vengono
+   lette correttamente da Bootstrap sul colore delle celle */
+.data-table td.positive {
+    color: #00c97a !important;
+    font-weight: 700;
+    background-color: rgba(0, 201, 122, 0.06) !important;
+}
+
+.data-table td.negative {
+    color: #ff4d6d !important;
+    font-weight: 700;
+    background-color: rgba(255, 77, 109, 0.06) !important;
+}
+
+body.light-mode .data-table td.positive { color: #007a47 !important; }
+body.light-mode .data-table td.negative { color: #cc2244 !important; }

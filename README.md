@@ -60,6 +60,3 @@ Apri `index.html` nel browser (o usa Live Server in VSCode).
 - **Google Fonts** — Syne + JetBrains Mono
 
 # Migliorie
-- il CSV deve essere su colonne diverse
-- il change deve essere verde se positivo rosso se negatiuvo anche nella tabella
-- Prendere Logo Azienda da db e mostrare in un container
