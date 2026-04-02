@@ -45,14 +45,14 @@ Una dashboard web interattiva e **completamente responsive** per monitorare i me
 
 1. **Clona o scarica la repository:**
    ```bash
-   git clone https://github.com/utente/stockvision.git
-   cd stockvision
+   git clone https://github.com/francavillaandrea/ProjectAlphaVantage.git
+   cd ProjectAlphaVantage
    ```
 
 2. **Installa e avvia json-server:**
    ```bash
    npm install -g json-server
-   json-server --watch db.json --port 3000
+   json-server ./data/db.json
    ```
    json-server sarà raggiungibile su `http://localhost:3000`.
 
