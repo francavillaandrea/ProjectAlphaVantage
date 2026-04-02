@@ -1,26 +1,18 @@
 "use strict";
 
-// ═══════════════════════════════════════════════════════════
-//  CONFIGURAZIONE
-// ═══════════════════════════════════════════════════════════
+//Configurazione 
 
-const AV_KEY      = "demo";   // ← inserisci la tua API key AlphaVantage
-const AV_BASE     = "https://www.alphavantage.co/query";
-const JSON_SERVER = "http://localhost:3000";
+const AV_KEY        = "DLVWWJ2XCVMFNXJQ";
+const AV_BASE       = "https://www.alphavantage.co/query";
+const LOGO_DEV_KEY  = "pk_e_5XOf_5SMag8q335oqC6Q";
+const LOGO_DEV_BASE = "https://img.logo.dev/ticker/";
+const JSON_SERVER   = "http://localhost:3000";
 
-// ═══════════════════════════════════════════════════════════
-//  STATO
-// ═══════════════════════════════════════════════════════════
-
-let listaAziende        = [];   // { symbol, name }
-let listaOverview       = [];   // array overview (con campo Logo)
-let chart               = null; // istanza Chart.js corrente
-let datiGraficoCorrente = [];   // voci [data, candela] per export CSV
-let currentSymbol       = "";   // simbolo dell'ultimo grafico
-
-// ═══════════════════════════════════════════════════════════
-//  SORGENTE DATI  ("local" = json-server | "live" = AlphaVantage)
-// ═══════════════════════════════════════════════════════════
+let listaAziende        = [];   // caricata da json-server al boot
+let listaOverview       = [];
+let chart               = null;
+let datiGraficoCorrente = [];
+let currentSymbol       = "";
 
 function getSorgente() {
     return dataSource.value;
@@ -30,14 +22,23 @@ dataSource.addEventListener("change", function () {
     const isLive = getSorgente() == "live";
     statSource.textContent = isLive ? "AlphaVantage" : "Locale";
     showToast(isLive
-        ? "Sorgente: AlphaVantage live (25 req/giorno nel piano free)"
+        ? "Sorgente: AlphaVantage live — la ricerca usa SYMBOL_SEARCH in tempo reale"
         : "Sorgente: JSON locale (json-server)", "warning");
+
+    // Svuota i risultati di ricerca e le select quando cambia sorgente
+    searchResults.innerHTML = "";
+    searchInput.value       = "";
+
+    if (isLive) {
+        // In modalità live le select vengono popolate dopo la prima ricerca;
+        // per ora le svuotiamo mostrando solo il placeholder
+        svuotaSelect();
+    } else {
+        // Torna alla lista locale già caricata in memoria
+        popolaSelectDaLista(listaAziende);
+    }
 });
-
-// ═══════════════════════════════════════════════════════════
-//  TEMA DARK / LIGHT
-// ═══════════════════════════════════════════════════════════
-
+// Cambio Tema
 function applicaTema(tema) {
     if (tema == "dark") {
         document.body.classList.remove("light-mode");
@@ -60,10 +61,6 @@ themeToggle.addEventListener("click", function () {
     applicaTema(corrente == "dark" ? "light" : "dark");
 });
 
-// ═══════════════════════════════════════════════════════════
-//  TOAST
-// ═══════════════════════════════════════════════════════════
-
 function showToast(messaggio, tipo = "success") {
     liveToast.classList.remove("success", "error", "warning");
     liveToast.classList.add(tipo);
@@ -72,11 +69,9 @@ function showToast(messaggio, tipo = "success") {
     bootstrap.Toast.getOrCreateInstance(liveToast, { delay: 3200 }).show();
 }
 
-// ═══════════════════════════════════════════════════════════
-//  AVVIO PAGINA
-// ═══════════════════════════════════════════════════════════
-
 avvioPagina();
+
+// Fetch Dati
 
 async function avvioPagina() {
     await caricaAziende();
@@ -84,12 +79,10 @@ async function avvioPagina() {
     showToast("Dati caricati correttamente.", "success");
 }
 
-// ═══════════════════════════════════════════════════════════
-//  SEZIONE 1 — SYMBOL_SEARCH (ricerca incrementale lato client)
-// ═══════════════════════════════════════════════════════════
-
+// Caricamento iniziale sempre da json-server
+// (le select vengono sempre precaricate con i dati locali)
 async function caricaAziende() {
-    const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/symbolsearch").catch(ajax.errore);
+    const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/symbolsearch").catch(console.error);
     if (!httpResponse) return;
 
     listaAziende = httpResponse.data.map(az => ({
@@ -97,17 +90,18 @@ async function caricaAziende() {
         name:   az["2. name"]
     }));
 
-    popolaSelect(companySelect);
-    popolaSelect(chartSymbol);
-    popolaSelect(overviewSymbol);
-    popolaSelect(mapSymbol);
-
+    popolaSelectDaLista(listaAziende);
     statAziende.textContent = listaAziende.length;
 }
 
-function popolaSelect(selectEl) {
+//Popola tutte le select da un array { symbol, name }
+function popolaSelectDaLista(lista) {
+    [companySelect, chartSymbol, overviewSymbol, mapSymbol].forEach(sel => popolaSelect(sel, lista));
+}
+
+function popolaSelect(selectEl, lista) {
     selectEl.innerHTML = '<option value="">— Seleziona —</option>';
-    for (let az of listaAziende) {
+    for (let az of lista) {
         const opt = document.createElement("option");
         opt.value       = az.symbol;
         opt.textContent = az.symbol + " — " + az.name;
@@ -115,21 +109,72 @@ function popolaSelect(selectEl) {
     }
 }
 
+// Svuota le select (usato quando si passa a sorgente live prima di una ricerca)
+function svuotaSelect() {
+    [companySelect, chartSymbol, overviewSymbol, mapSymbol].forEach(sel => {
+        sel.innerHTML = '<option value="">— Cerca un\'azienda sopra —</option>';
+    });
+    statAziende.textContent = "—";
+}
+
+// Ricerca incrementale
+// Locale: filtra listaAziende in memoria
+// Live:   chiama SYMBOL_SEARCH di AlphaVantage
 searchInput.addEventListener("keyup", function () {
     const query = searchInput.value.trim();
     if (query.length >= 2) {
-        cercaAziende(query);
+        if (getSorgente() == "live") {
+            cercaAziendeAV(query);
+        } else {
+            cercaAziendeLocale(query);
+        }
     } else {
         searchResults.innerHTML = "";
     }
 });
 
-function cercaAziende(query) {
+// Ricerca locale (filtro lato client come da Best Practice PDF)
+function cercaAziendeLocale(query) {
     const q = query.toLowerCase();
     const risultati = listaAziende.filter(az =>
         az.symbol.toLowerCase().includes(q) || az.name.toLowerCase().includes(q)
     );
+    renderRisultatiRicerca(risultati, query);
+}
 
+// Ricerca live tramite AlphaVantage SYMBOL_SEARCH
+// Restituisce tutte le aziende il cui nome/simbolo contiene la keyword.
+// Ogni risposta è un array di bestMatch con symbol e name diversi.
+async function cercaAziendeAV(query) {
+    searchResults.innerHTML = '<p class="no-results">🔍 Ricerca in corso su AlphaVantage…</p>';
+
+    const url = AV_BASE + "?function=SYMBOL_SEARCH&keywords=" + encodeURIComponent(query) + "&apikey=" + AV_KEY;
+    const httpResponse = await ajax.sendRequest("GET", url).catch(console.error);
+    if (!httpResponse) { searchResults.innerHTML = ""; return; }
+
+    const bestMatches = httpResponse.data["bestMatches"];
+    if (!bestMatches || bestMatches.length == 0) {
+        searchResults.innerHTML = '<p class="no-results">Nessuna azienda trovata su AlphaVantage per "' + query + '"</p>';
+        return;
+    }
+
+    // Normalizza nel formato { symbol, name } usato nel resto del codice
+    const risultati = bestMatches.map(m => ({
+        symbol: m["1. symbol"],
+        name:   m["2. name"],
+        type:   m["3. type"],
+        region: m["4. region"]
+    }));
+
+    // Aggiorna le select con i risultati trovati (così l'utente può selezionare)
+    popolaSelectDaLista(risultati);
+    statAziende.textContent = risultati.length;
+
+    renderRisultatiRicerca(risultati, query);
+}
+
+// Renderizza le card dei risultati (comune a locale e live)
+function renderRisultatiRicerca(risultati, query) {
     if (risultati.length == 0) {
         searchResults.innerHTML = '<p class="no-results">Nessuna azienda trovata per "' + query + '"</p>';
         return;
@@ -140,12 +185,13 @@ function cercaAziende(query) {
     searchResults.innerHTML = risultati.map(az => {
         const symHl  = az.symbol.replace(re, "<mark>$1</mark>");
         const nameHl = az.name.replace(re, "<mark>$1</mark>");
+        const badge  = az.region ? `<span class="result-region">${az.region}</span>` : "";
         return `
             <div class="search-result-card"
                  role="button" tabindex="0"
                  onclick="selezionaDaRicerca('${az.symbol}')"
                  onkeydown="if(event.key=='Enter') selezionaDaRicerca('${az.symbol}')">
-                <div class="result-symbol">${symHl}</div>
+                <div class="result-symbol">${symHl} ${badge}</div>
                 <div class="result-name">${nameHl}</div>
             </div>`;
     }).join("");
@@ -159,10 +205,6 @@ function selezionaDaRicerca(symbol) {
     section_quote.scrollIntoView({ behavior: "smooth" });
     caricaQuotazione(symbol);
 }
-
-// ═══════════════════════════════════════════════════════════
-//  SEZIONE 2 — GLOBAL_QUOTE
-// ═══════════════════════════════════════════════════════════
 
 btnQuote.addEventListener("click", function () {
     const symbol = companySelect.value;
@@ -188,16 +230,12 @@ async function caricaQuotazioneLocale(symbol) {
     quoteLoading.style.display      = "flex";
     quoteTableWrapper.style.display = "none";
 
-    const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/globalquote").catch(ajax.errore);
+    const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/globalquote").catch(console.error);
     quoteLoading.style.display = "none";
     if (!httpResponse) return;
 
-    // Filtro lato client (Best Practice PDF)
     const raw = httpResponse.data.find(q => q.symbol.toUpperCase() == symbol.toUpperCase());
-    if (!raw) {
-        showToast("Quotazione non trovata in locale per " + symbol, "warning");
-        return;
-    }
+    if (!raw) { showToast("Quotazione non trovata in locale per " + symbol, "warning"); return; }
     visualizzaQuotazione(normalizzaQuote(raw));
 }
 
@@ -206,7 +244,7 @@ async function caricaQuotazioneAV(symbol) {
     quoteTableWrapper.style.display = "none";
 
     const url = AV_BASE + "?function=GLOBAL_QUOTE&symbol=" + symbol + "&apikey=" + AV_KEY;
-    const httpResponse = await ajax.sendRequest("GET", url).catch(ajax.errore);
+    const httpResponse = await ajax.sendRequest("GET", url).catch(console.error);
     quoteLoading.style.display = "none";
     if (!httpResponse) return;
 
@@ -219,7 +257,6 @@ async function caricaQuotazioneAV(symbol) {
     showToast("Quotazione live aggiornata per " + symbol + "!", "success");
 }
 
-// Normalizza i campi "01. symbol" / "open" in entrambi i formati
 function normalizzaQuote(raw) {
     return {
         symbol:           raw["01. symbol"]            || raw.symbol            || "—",
@@ -237,7 +274,6 @@ function normalizzaQuote(raw) {
 
 function visualizzaQuotazione(quote) {
     const changeVal    = parseFloat(quote.change) || 0;
-    // FIX: classe CSS verde se positivo, rosso se negativo
     const classeChange = changeVal >= 0 ? "positive" : "negative";
     const segno        = changeVal >= 0 ? "+" : "";
     const vol          = parseInt(String(quote.volume).replace(/[^0-9]/g, "")) || 0;
@@ -258,12 +294,6 @@ function visualizzaQuotazione(quote) {
     quoteTableWrapper.style.display = "block";
 }
 
-// ═══════════════════════════════════════════════════════════
-//  SEZIONE 3 — GRAFICI STORICI
-//  Usa ChartFactory da myCharts.js (una classe per tipo)
-//  Tipi: line | bar | area | candlestick | radar | doughnut
-// ═══════════════════════════════════════════════════════════
-
 btnChart.addEventListener("click", function () {
     const symbol = chartSymbol.value;
     if (!symbol) { showToast("Seleziona prima un'azienda!", "warning"); return; }
@@ -280,7 +310,6 @@ btnSaveChart.addEventListener("click", function () {
     showToast("Grafico salvato come PNG.", "success");
 });
 
-// FIX CSV: usa \t come separatore → Excel/Calc apre su colonne separate
 btnDownloadCsv.addEventListener("click", function () {
     if (!datiGraficoCorrente.length) { showToast("Genera prima un grafico!", "warning"); return; }
     scaricaCsv();
@@ -309,14 +338,13 @@ async function generaGrafico(symbol) {
     chartBox.style.display         = "block";
     chartTitle.textContent         = titolo;
 
-    // Usa ChartFactory (myCharts.js) — una classe per ogni tipo
     chart = ChartFactory.build(tipoChart, stockChart, voci, titolo, symbol, chart);
 
     showToast("Grafico generato per " + symbol + ".", "success");
 }
 
 async function caricaSerieLocale(symbol, mesi) {
-    const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/timeseries").catch(ajax.errore);
+    const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/timeseries").catch(console.error);
     if (!httpResponse) return [];
 
     const entry = httpResponse.data.find(s => s.symbol.toUpperCase() == symbol.toUpperCase());
@@ -328,11 +356,11 @@ async function caricaSerieLocale(symbol, mesi) {
 async function caricaSerieAV(symbol, mesi) {
     let funzione    = "TIME_SERIES_MONTHLY";
     let chiaveSerie = "Monthly Time Series";
-    if (mesi <= 3)  { funzione = "TIME_SERIES_DAILY";  chiaveSerie = "Time Series (Daily)"; }
+    if (mesi <= 3)       { funzione = "TIME_SERIES_DAILY";  chiaveSerie = "Time Series (Daily)"; }
     else if (mesi <= 12) { funzione = "TIME_SERIES_WEEKLY"; chiaveSerie = "Weekly Time Series"; }
 
     const url = AV_BASE + "?function=" + funzione + "&symbol=" + symbol + "&apikey=" + AV_KEY;
-    const httpResponse = await ajax.sendRequest("GET", url).catch(ajax.errore);
+    const httpResponse = await ajax.sendRequest("GET", url).catch(console.error);
     if (!httpResponse) return [];
 
     const rawSerie = httpResponse.data[chiaveSerie];
@@ -346,41 +374,27 @@ function estraiVoci(rawSerie, mesi) {
     return voci;
 }
 
-// FIX: CSV con TAB come separatore → colonne separate in Excel/Calc
 function scaricaCsv() {
     const SEP  = "\t";
     const CRLF = "\r\n";
 
     const intestazione = ["Data", "Open", "High", "Low", "Close", "Volume"].join(SEP);
     const righe = datiGraficoCorrente.map(([data, c]) =>
-        [
-            data,
-            c["1. open"]  || "",
-            c["2. high"]  || "",
-            c["3. low"]   || "",
-            c["4. close"] || "",
-            c["5. volume"]|| ""
-        ].join(SEP)
+        [data, c["1. open"] || "", c["2. high"] || "", c["3. low"] || "", c["4. close"] || "", c["5. volume"] || ""].join(SEP)
     );
 
-    // BOM UTF-8 (\uFEFF) per aprire correttamente in Excel italiano
-    const contenuto = "\uFEFF" + intestazione + CRLF + righe.join(CRLF);
-    const blob = new Blob([contenuto], { type: "text/tab-separated-values;charset=utf-8;" });
+    const blob = new Blob(["\uFEFF" + intestazione + CRLF + righe.join(CRLF)], { type: "text/tab-separated-values;charset=utf-8;" });
     const url  = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href     = url;
     link.download = "stockvision-" + currentSymbol + ".tsv";
     link.click();
     URL.revokeObjectURL(url);
-    showToast("CSV scaricato (formato TSV — si apre su colonne separate in Excel).", "success");
+    showToast("CSV scaricato (TSV — colonne separate in Excel).", "success");
 }
 
-// ═══════════════════════════════════════════════════════════
-//  SEZIONE 4 — OVERVIEW  +  LOGO AZIENDA
-// ═══════════════════════════════════════════════════════════
-
 async function caricaOverview() {
-    const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/overview").catch(ajax.errore);
+    const httpResponse = await ajax.sendRequest("GET", JSON_SERVER + "/overview").catch(console.error);
     if (!httpResponse) return;
     listaOverview = httpResponse.data;
 }
@@ -388,7 +402,6 @@ async function caricaOverview() {
 btnOverview.addEventListener("click", function () {
     const symbol = overviewSymbol.value;
     if (!symbol) { showToast("Seleziona prima un'azienda!", "warning"); return; }
-
     if (getSorgente() == "live") {
         caricaOverviewAV(symbol);
     } else {
@@ -408,7 +421,7 @@ function mostraOverview(symbol) {
 
 async function caricaOverviewAV(symbol) {
     const url = AV_BASE + "?function=OVERVIEW&symbol=" + symbol + "&apikey=" + AV_KEY;
-    const httpResponse = await ajax.sendRequest("GET", url).catch(ajax.errore);
+    const httpResponse = await ajax.sendRequest("GET", url).catch(console.error);
     if (!httpResponse) return;
 
     const dati = httpResponse.data;
@@ -421,22 +434,15 @@ async function caricaOverviewAV(symbol) {
 }
 
 function renderOverviewCard(dati) {
-    // ── Logo azienda ──────────────────────────────────────
-    // Cerca prima nel db locale (campo Logo), poi fallback su Clearbit
-    const datiLocali = listaOverview.find(o => o.Symbol.toUpperCase() == dati.Symbol.toUpperCase());
-    const logoUrl    = datiLocali?.Logo
-        || "https://logo.clearbit.com/" + (dati.OfficialSite
-            ? dati.OfficialSite.replace(/^https?:\/\//, "").split("/")[0]
-            : dati.Symbol.toLowerCase() + ".com");
+    const logoUrl = LOGO_DEV_BASE + encodeURIComponent(dati.Symbol)
+        + "?token=" + LOGO_DEV_KEY + "&size=200&format=png";
 
-    // Mostra il container logo con immagine e fallback a icona
     if (logoContainer) {
-        companyLogo.src               = logoUrl;
-        companyLogo.alt               = dati.Name + " logo";
-        logoContainer.style.display   = "flex";
+        companyLogo.src             = logoUrl;
+        companyLogo.alt             = dati.Name + " logo";
+        logoContainer.style.display = "flex";
     }
 
-    // ── Card overview ─────────────────────────────────────
     overviewCard.innerHTML = `
         <article class="overview-card">
             <div class="overview-header">
@@ -488,10 +494,6 @@ function creaStatCard(label, valore) {
         </div>`;
 }
 
-// ═══════════════════════════════════════════════════════════
-//  SEZIONE 5 — MAPPA (myMapLibre)
-// ═══════════════════════════════════════════════════════════
-
 btnMap.addEventListener("click", function () {
     const symbol = mapSymbol.value;
     if (!symbol) { showToast("Seleziona prima un'azienda!", "warning"); return; }
@@ -506,7 +508,7 @@ async function mostraSedeSuMappa(symbol) {
         return;
     }
 
-    const indirizzo = datiOverview.Address;
+    const indirizzo  = datiOverview.Address;
     const gpsAddress = await myMapLibre.geocode(indirizzo);
     if (!gpsAddress) return;
 
