@@ -4,7 +4,7 @@
 
 const AV_KEY        = "DLVWWJ2XCVMFNXJQ";
 const AV_BASE       = "https://www.alphavantage.co/query";
-const LOGO_DEV_KEY  = "pk_e_5XOf_5SMag8q335oqC6Q";
+const LOGO_DEV_KEY  = "	pk_e_5XOf_5SMag8q335oqC6Q";
 const LOGO_DEV_BASE = "https://img.logo.dev/ticker/";
 const JSON_SERVER   = "http://localhost:3000";
 
