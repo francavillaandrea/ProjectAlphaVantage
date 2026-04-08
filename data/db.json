@@ -11734,8 +11734,7 @@
             "Description": "International Business Machines Corporation (IBM) is an American multinational technology company headquartered in Armonk, New York, with operations in over 170 countries.",
             "Address": "1 NEW ORCHARD ROAD, ARMONK, NY, US",
             "OfficialSite": "https://www.ibm.com",
-            "id": 1,
-            "Logo": "https://logo.clearbit.com/ibm.com"
+            "id": 1
         },
         {
             "Symbol": "MSFT",
@@ -11743,8 +11742,7 @@
             "Description": "Microsoft Corporation is an American multinational technology company which produces computer software, consumer electronics, personal computers, and related services.",
             "Address": "ONE MICROSOFT WAY, REDMOND, WA, US",
             "OfficialSite": "https://www.microsoft.com",
-            "id": 2,
-            "Logo": "https://logo.clearbit.com/microsoft.com"
+            "id": 2
         },
         {
             "Symbol": "BABA",
@@ -11752,8 +11750,7 @@
             "Description": "Alibaba Group Holding Limited, also known as Alibaba Group and Alibaba.com, is a Chinese multinational technology company specializing in e-commerce, retail, Internet, and technology.",
             "Address": "26/F TOWER ONE, TIMES SQUARE, 1 MATHESON STREET, CAUSEWAY BAY, HK",
             "OfficialSite": "https://www.alibaba.com",
-            "id": 3,
-            "Logo": "https://logo.clearbit.com/alibaba.com"
+            "id": 3
         },
         {
             "Symbol": "600104.SHH",
@@ -11761,8 +11758,7 @@
             "Description": "SAIC Motor Corporation Limited (abbreviated as SAIC Motor) achieved wholesale sales of 4.013 million vehicles and retail sales of 4.639 million vehicles in 2024, of which 2.741 million vehicles were self-owned brands.",
             "Address": "489 Weihai Rd, Jing'An, Shanghai, China, 200041",
             "OfficialSite": "https://www.saicmotor.com",
-            "id": 4,
-            "Logo": "https://logo.clearbit.com/saicmotor.com"
+            "id": 4
         },
         {
             "Symbol": "SNE",
@@ -11770,8 +11766,7 @@
             "Description": "Sony is one of the most comprehensive entertainment companies in the world, thanks to its four operating segments that focus on electronics.",
             "Address": "1 Chome-7-1 Konan, Minato City, Tokyo 108-0075, Japan",
             "OfficialSite": "https://www.sony.com",
-            "id": 5,
-            "Logo": "https://logo.clearbit.com/sony.com"
+            "id": 5
         },
         {
             "Symbol": "XIACF",
@@ -11779,8 +11774,7 @@
             "Description": "Xiaomi produces cell phones, apps, laptops, home appliances, earphones, electric scooters, smart TVs, cars and other everyday products.",
             "Address": "China, CN 北京市 海淀区 中关村大街 19 19号新中关购物中心1层 邮政编码: 100086",
             "OfficialSite": "https://www.mi.com",
-            "id": 6,
-            "Logo": "https://logo.clearbit.com/mi.com"
+            "id": 6
         }
     ]
 }

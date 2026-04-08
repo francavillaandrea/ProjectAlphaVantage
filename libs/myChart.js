@@ -1,12 +1,12 @@
 "use strict";
 
-/* ═══════════════════════════════════════════════════════════
+/*
    myCharts.js
    Una classe per ogni tipo di grafico.
    Ogni classe espone un unico metodo:
        build(canvas, voci, titolo, symbol) → Chart
    Tutte leggono il tema corrente dal body per i colori.
-═══════════════════════════════════════════════════════════ */
+*/
 
 function getChartTheme() {
     const isDark = document.body.classList.contains("dark-mode");
@@ -82,9 +82,10 @@ function pluginOptions(theme, titolo) {
 }
 
 
-/* ─────────────────────────────────────────────────────────
+/*
    1. LINE CHART
-───────────────────────────────────────────────────────── */
+
+*/
 class LineChartBuilder {
     build(canvas, voci, titolo, symbol, chartPrecedente) {
         destroyChart(chartPrecedente);
@@ -118,9 +119,10 @@ class LineChartBuilder {
 }
 
 
-/* ─────────────────────────────────────────────────────────
+/*
    2. BAR CHART  (colore verde/rosso per candela)
-───────────────────────────────────────────────────────── */
+
+*/
 class BarChartBuilder {
     build(canvas, voci, titolo, symbol, chartPrecedente) {
         destroyChart(chartPrecedente);
@@ -151,9 +153,10 @@ class BarChartBuilder {
 }
 
 
-/* ─────────────────────────────────────────────────────────
+/*
    3. AREA CHART  (line con fill gradiente)
-───────────────────────────────────────────────────────── */
+
+*/
 class AreaChartBuilder {
     build(canvas, voci, titolo, symbol, chartPrecedente) {
         destroyChart(chartPrecedente);
@@ -193,9 +196,10 @@ class AreaChartBuilder {
 }
 
 
-/* ─────────────────────────────────────────────────────────
+/*
    4. CANDLESTICK  (richiede chartjs-chart-financial)
-───────────────────────────────────────────────────────── */
+
+*/
 class CandlestickChartBuilder {
     build(canvas, voci, titolo, symbol, chartPrecedente) {
         destroyChart(chartPrecedente);
@@ -269,9 +273,9 @@ class CandlestickChartBuilder {
 }
 
 
-/* ─────────────────────────────────────────────────────────
+/*
    5. RADAR CHART  (ultimi N mesi come assi radiali)
-───────────────────────────────────────────────────────── */
+*/
 class RadarChartBuilder {
     build(canvas, voci, titolo, symbol, chartPrecedente) {
         destroyChart(chartPrecedente);
@@ -318,9 +322,9 @@ class RadarChartBuilder {
 }
 
 
-/* ─────────────────────────────────────────────────────────
-   6. DOUGHNUT CHART  (distribuzione % dei prezzi di chiusura)
-───────────────────────────────────────────────────────── */
+/*
+6. DOUGHNUT CHART  (distribuzione % dei prezzi di chiusura)
+*/
 class DoughnutChartBuilder {
     build(canvas, voci, titolo, symbol, chartPrecedente) {
         destroyChart(chartPrecedente);
@@ -373,9 +377,9 @@ class DoughnutChartBuilder {
 }
 
 
-/* ─────────────────────────────────────────────────────────
+/*
    FACTORY — restituisce il builder corretto
-───────────────────────────────────────────────────────── */
+*/
 const ChartFactory = {
     line: new LineChartBuilder(),
     bar: new BarChartBuilder(),
